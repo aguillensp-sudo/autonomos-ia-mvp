@@ -1,0 +1,158 @@
+# OpenSpec Configuration — Autónomos IA MVP
+# Read by the Orchestrator agent before creating any tasks.md
+
+project:
+  name: autonomos-ia-mvp
+  description: AI agent for Spanish self-employed tax compliance (autónomos)
+  mvp_process: P04 — IVA Trimestral (Modelo 303)
+
+# Branch naming convention
+branches:
+  feature: "feature/{change-name}"
+  fix: "fix/{change-name}"
+  base: main
+
+# Agent model assignment
+agents:
+  orchestrator:
+    model: claude-opus-4-8
+    role: planning, evaluation, exit-criteria, adversarial-review
+  backend_developer:
+    model: claude-sonnet-4-6   # GLM-5.2 via DeepInfra when harness is built
+    role: Python, FastAPI, fiscal engine, Playwright RPA, Supabase migrations, ARQ workers
+  frontend_developer:
+    model: claude-sonnet-4-6   # GLM-5.2 via DeepInfra when harness is built
+    role: Next.js 15, TypeScript, shadcn/ui, Supabase Realtime, Playwright E2E
+
+# Backend mandatory steps (included in every backend tasks.md)
+backend:
+  language: Python 3.12
+  framework: FastAPI 0.115+
+  test_runner: pytest
+  test_command: "pytest tests/ -v --cov=src/fiscal --cov-report=term-missing"
+  coverage_threshold: 100   # For src/fiscal/ modules — non-negotiable
+  server_start: "uvicorn src.api.main:app --reload --port 8000"
+  server_health: "curl http://localhost:8000/health"
+  auth_header: "Authorization: Bearer <supabase_jwt>"   # Required on all protected endpoints
+  migration_tool: supabase
+  migration_command: "supabase db push"
+
+  mandatory_steps:
+    - id: review_existing_tests
+      label: "Review and Update Existing Unit Tests"
+      mandatory: true
+    - id: run_unit_tests
+      label: "Run Unit Tests and Verify Database State"
+      mandatory: true
+      report_pattern: "YYYY-MM-DD-step-N-unit-test-and-db-verification.md"
+    - id: curl_testing
+      label: "Manual Endpoint Testing with curl"
+      mandatory: true
+      report_pattern: "YYYY-MM-DD-step-N-curl-testing.md"
+      notes: |
+        All endpoints require Supabase JWT in Authorization header.
+        Use test user JWT from .env.test for curl commands.
+        Pattern: curl -X <METHOD> http://localhost:8000/api/proceso/p04/<endpoint> \
+          -H "Authorization: Bearer $TEST_JWT" \
+          -H "Content-Type: application/json" \
+          -d '<json-body>'
+    - id: update_docs
+      label: "Update Technical Documentation"
+      mandatory: true
+
+  fiscal_integrity_checks:
+    # Orchestrator runs these on every change touching src/fiscal/
+    - "ISP detection handles nif_proveedor=None, nif_proveedor='', and non-ES prefix"
+    - "saldo_iva_compensar is read at calculation start and written at calculation end"
+    - "No fiscal arithmetic in FastAPI route handlers — only in src/fiscal/"
+    - "LangGraph interrupt node present in every graph that leads to AEAT submission"
+    - "RLS enabled on every new Supabase table with user_id = auth.uid() policy"
+
+# Frontend mandatory steps (included in every frontend tasks.md)
+frontend:
+  language: TypeScript (strict)
+  framework: Next.js 15 (App Router)
+  test_runner: Playwright
+  test_command: "npx playwright test"
+  test_command_single: "npx playwright test e2e/<spec-file>.spec.ts"
+  server_start: "npm run dev"
+  server_url: "http://localhost:3000"
+  min_viewport_width: 375   # Mobile first — autónomo may be on phone
+
+  mandatory_steps:
+    - id: e2e_playwright
+      label: "E2E Testing with Playwright"
+      mandatory: true
+      report_pattern: "YYYY-MM-DD-step-N-e2e-playwright.md"
+      notes: |
+        Run with: npx playwright test
+        NOT Playwright MCP browser tools — use the Playwright test runner directly.
+        Tests live in frontend/e2e/*.spec.ts
+        Always cover: happy path slice + critical negative case for the task.
+    - id: update_docs
+      label: "Update Technical Documentation"
+      mandatory: true
+
+  ui_integrity_checks:
+    # Orchestrator runs these on every frontend change
+    - "ConfirmacionModal confirm button requires deliberate click — no auto-advance"
+    - "OCR fields with confidence < 0.8 block progress until user acts"
+    - "Every RPA-dependent screen has 4 states: waiting / needs-re-auth / failed / done"
+    - "No fiscal term displayed that is not in docs/domain-context.md glossary"
+    - "Every euro amount is paired with its period (e.g. '2.340 € — 1T 2026')"
+    - "All components work at 375px minimum width"
+
+# Task structure requirements
+tasks:
+  step_zero: "Create Feature Branch (MANDATORY — FIRST STEP)"
+  step_zero_pattern: "feature/{change-name}"
+  completion_gate: |
+    A task can only be marked [x] in tasks.md AFTER:
+    1. The agent has executed all required tests itself (never delegated to user)
+    2. Test output is pasted in the agent's report
+    3. The report file exists in specs/<change-name>/reports/
+    4. Database state is verified/restored if the task modifies data
+  never_delegate: |
+    The agent MUST NEVER ask the user to:
+    - Run pytest or any test command
+    - Execute curl commands
+    - Run npx playwright test
+    - Start servers
+    - Verify database state
+    The agent does all of this itself.
+
+# Report structure
+reports:
+  base_path: "specs/{change-name}/reports/"
+  naming_patterns:
+    unit_tests: "YYYY-MM-DD-step-N-unit-test-and-db-verification.md"
+    curl_tests: "YYYY-MM-DD-step-N-curl-testing.md"
+    e2e_tests: "YYYY-MM-DD-step-N-e2e-playwright.md"
+  required_sections:
+    - "Commands Executed"
+    - "Test Results"
+    - "Database State Verification (if applicable)"
+    - "Outcome: PASS/FAIL"
+    - "Blocking issues (if any)"
+
+# Acceptance criteria references
+# Maps to docs/Autonomos.io/3. SDD/fases_desarrollo_criterios_aceptacion_MVP_2.md
+acceptance_criteria:
+  phase_1: "F1 — Fundamentos y datos (CA-F1-01 to CA-F1-10)"
+  phase_2: "F2 — Motor fiscal P04 (CA-F2-01 to CA-F2-10)"
+  phase_3: "F3 — Agente conversacional (CA-F3-01 to CA-F3-10)"
+  phase_4: "F4 — RPA AEAT (CA-F4-01 to CA-F4-10)"
+  phase_5: "F5 — Integración MVP (CA-F5-01 to CA-F5-10)"
+
+# What is out of scope for MVP — agents must not implement these
+out_of_scope:
+  - "P01/P02 — AEAT census registration (M036)"
+  - "P05/P06/P07 — Q2/Q3/Q4 IVA (same logic as P04, implement after P04 works)"
+  - "P08 — Annual VAT summary (M390)"
+  - "P09 — IRPF fraccionado (M130) — specified but not MVP"
+  - "P13 — Módulos regime (M131)"
+  - "P14 — Annual income tax return (M100)"
+  - "P24/P25/P26 — RETA management"
+  - "Authentication Model A (certificate vault) — V2 only"
+  - "Régimen foral (País Vasco, Navarra)"
+  - "GLM-5.2 harness — built as part of the product, not the dev tooling"

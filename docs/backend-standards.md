@@ -2,7 +2,7 @@
 
 ## Stack
 
-- **Language:** Python 3.12 (strict typing, Pydantic v2 for all models)
+- **Language:** Python 3.14 (strict typing, Pydantic v2 for all models). Deviation from the original 3.12 spec: written before the 3.14 release, fully compatible.
 - **API framework:** FastAPI 0.115+ with async/await throughout
 - **Agent orchestration:** LangGraph 0.4+ (StateGraph, interrupt nodes, PostgresSaver checkpointing)
 - **LLM — Orchestrator:** Claude Opus 4.8 (planning, evaluation, exit-criteria, reviewer nodes)
