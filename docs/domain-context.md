@@ -1,6 +1,6 @@
 # Domain Context — Spanish Fiscal Domain for Autonomous Workers (Autónomos)
 
-This document is the reference for agents working on this project who need to understand the Spanish fiscal and social security domain. It is intentionally written in English (per base-standards.md §2) with Spanish legal terms preserved as proper nouns where precision requires it.
+This document is the reference for agents working on this project who need to understand the Spanish fiscal and social security domain. It is intentionally written in English (per CLAUDE.md §2) with Spanish legal terms preserved as proper nouns where precision requires it.
 
 ---
 

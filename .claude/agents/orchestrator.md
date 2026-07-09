@@ -1,0 +1,1 @@
+C:/Users/admin/proyectos/Autonomos.io/autonomos-ia-mvp/ai-specs/agents/orchestrator.md

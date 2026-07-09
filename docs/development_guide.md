@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.14 (deviation from the original 3.12 spec — spec was written before the 3.14 release; 3.14 is fully compatible with the stack used here)
 - Node.js 20.19+
 - Docker + Docker Compose
 - Supabase CLI (`npm install -g supabase`)
@@ -59,12 +59,18 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 # Start Redis
 docker compose up redis -d
 
-# Start Supabase local (first time takes a few minutes)
+# Start Supabase local (first time takes a few minutes — pulls Docker images)
 supabase start
 
-# Run migrations
-supabase db push
+# Migrations under src/db/migrations/ are mirrored into supabase/migrations/
+# (Supabase CLI naming convention: YYYYMMDDHHMMSS_description.sql) and are
+# applied automatically by `supabase start`. To apply new ones incrementally:
+supabase migration up
 ```
+
+**Local vs. remote Supabase — why both exist:** development uses **local Supabase** (via Docker, as above); production uses the **remote Supabase project** (`autonomos-ia-mvp`). This split was adopted during Phase 1 (`fiscal-engine-fundamentos`) because the remote project got stuck in `COMING_UP` status during a Supabase Cloud incident. Local development is not blocked by remote Cloud availability, so it remains the default for day-to-day work even after the incident resolves — the remote project is provisioned and used for production/staging only.
+
+**Windows note:** if `supabase start` fails with `supabase_analytics_... container is not ready: unhealthy`, this is a known Windows limitation (Logflare/analytics needs the Docker daemon exposed over TCP, which we don't configure). Set `enabled = false` under `[analytics]` in `supabase/config.toml` — analytics is not used by this project.
 
 ### 5. Seed data
 

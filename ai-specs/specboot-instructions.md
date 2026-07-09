@@ -1,1 +1,1 @@
-../README.md
+C:/Users/admin/proyectos/Autonomos.io/autonomos-ia-mvp/README.md

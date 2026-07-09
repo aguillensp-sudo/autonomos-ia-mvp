@@ -1,2 +1,12 @@
 .DS_Store
 .worktrees/
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+supabase/.branches/
+supabase/.temp/
+.coverage
+htmlcov/

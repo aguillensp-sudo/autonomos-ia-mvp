@@ -1,1 +1,1 @@
-../../ai-specs/agents/backend-developer.md
+C:/Users/admin/proyectos/Autonomos.io/autonomos-ia-mvp/ai-specs/agents/backend-developer.md
