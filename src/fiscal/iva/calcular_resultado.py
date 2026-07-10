@@ -11,10 +11,16 @@ def calcular_resultado_m303(
     devengado: ResultadoDevengado,
     deducible: ResultadoDeducible,
     saldo_compensar_anterior: Decimal,
+    solicita_devolucion: bool = False,
 ) -> ResultadoM303:
     """Art. 99 LIVA. Casilla 70/71 result: positive = a ingresar, negative = a compensar,
     zero with no invoices at all = sin_actividad. Applies casilla 110 carry-forward
     (saldo_compensar_anterior) before determining the final sign.
+
+    Casuística C08 (Art. 115 LIVA — devoluciones): only in periodo == '4T' with
+    a negative result, the caller (agent, per D12 in the P04 source spec) may
+    set solicita_devolucion=True to route the negative result to casilla 72
+    (a_devolver) instead of casilla 110 (a_compensar, carried to next year's 1T).
 
     devengado.total = casilla 27. deducible.total = casilla 45.
     Pure function. No rounding until this final step (2 decimals).
@@ -27,8 +33,19 @@ def calcular_resultado_m303(
         tipo_resultado = "sin_actividad"
     elif resultado > Decimal("0.00"):
         tipo_resultado = "a_ingresar"
+    elif resultado < Decimal("0.00") and periodo == "4T" and solicita_devolucion:
+        tipo_resultado = "a_devolver"
     else:
         tipo_resultado = "a_compensar"
+
+    casillas = {
+        "27": devengado.total,
+        "45": deducible.total,
+        "70": resultado,
+        "110": saldo_compensar_anterior,
+    }
+    if tipo_resultado == "a_devolver":
+        casillas["72"] = abs(resultado)
 
     return ResultadoM303(
         ejercicio=ejercicio,
@@ -38,10 +55,5 @@ def calcular_resultado_m303(
         saldo_compensar_anterior=saldo_compensar_anterior,
         resultado=resultado,
         tipo_resultado=tipo_resultado,
-        casillas={
-            "27": devengado.total,
-            "45": deducible.total,
-            "70": resultado,
-            "110": saldo_compensar_anterior,
-        },
+        casillas=casillas,
     )
