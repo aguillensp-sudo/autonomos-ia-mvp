@@ -105,7 +105,7 @@ Esta es la decisión más crítica del proyecto. El perímetro define exactament
 | Alertas de vencimientos y plazos | Totalmente autónomo | No requerida |
 | Almacenamiento de justificantes oficiales | Totalmente autónomo | No requerida |
 | Monitorización de notificaciones de la AEAT | Totalmente autónomo | Alerta al usuario |
-| OCR de facturas emitidas y recibidas | Totalmente autónomo | Revisión recomendada |
+| OCR de facturas emitidas y recibidas | Totalmente autónomo | Confirmación obligatoria de campos numéricos fiscales (base_imponible, tipo_iva, cuota_iva) |
 
 ## 4.2 Fuera del alcance — Lo que el agente NO hace (V1)
 
@@ -207,7 +207,7 @@ El agente sustituye al gestor en la ejecución pero no en la obtención de ciert
 | Régimen IVA e IRPF elegido | Onboarding (una vez) | Decisiones guiadas (árbol D1-D8 del P01) | **SÍ — reglas deterministas** |
 | Certificado digital o Cl@ve PIN | Onboarding / cada presentación | Upload seguro (Modelo A) o PIN en tiempo real (Modelo B) | **PARCIAL** |
 | Cuenta bancaria para domiciliación RETA | Onboarding (una vez) | Formulario de configuración | **SÍ** |
-| Facturas emitidas del período | Cada trimestre | Upload foto/PDF → OCR automático + revisión | **SÍ — con revisión opcional** |
+| Facturas emitidas del período | Cada trimestre | Upload foto/PDF → OCR automático + revisión | **SÍ — con confirmación obligatoria de campos numéricos fiscales (base_imponible, tipo_iva, cuota_iva)** |
 | Facturas recibidas / gastos del período | Cada trimestre | Upload foto/PDF → OCR → categorización asistida | **SÍ — con clasificación asistida** |
 | Clasificación deducibilidad de gastos | Cada trimestre | Agente propone regla, usuario confirma casos dudosos | **PARCIAL** |
 | Situación personal para la Renta | Una vez al año (campaña Renta) | Cuestionario anual guiado por el agente | **NO — input usuario** |

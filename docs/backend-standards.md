@@ -33,13 +33,20 @@ src/
       health.py
     dependencies.py   # Auth, DB session injection
     main.py
-  agents/
+  agent/               # Phase 3: runtime P04 conversational agent (shipped product)
+    state.py           # EstadoP04 TypedDict
+    graph.py            # LangGraph StateGraph for P04
+    nodes/               # detectar_periodo, verificar_duplicado, recopilar_datos,
+                          # ocr_factura, calcular, resumir, confirmar, notificar
+    ocr.py               # Claude Vision invoice extraction
+    prompts/
+      p04_system_prompt.py
+    checkpointer.py       # PostgresSaver setup against Supabase
+  agents/              # external build-time-only harness — see CLAUDE.md §5, not
+                        # part of the shipped product
     orchestrator/     # Opus 4.8 — supervisor node
     backend_agent/    # GLM-5.2 — backend execution
     frontend_agent/   # GLM-5.2 — frontend execution
-    graphs/
-      p04_graph.py    # LangGraph StateGraph for P04
-    state.py          # TypedDict state definition
   fiscal/
     iva/
       calcular_devengado.py    # includes rectificativa routing (Phase 2)
