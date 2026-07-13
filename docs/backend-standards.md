@@ -42,11 +42,17 @@ src/
     state.py          # TypedDict state definition
   fiscal/
     iva/
-      calcular_devengado.py
+      calcular_devengado.py    # includes rectificativa routing (Phase 2)
       calcular_deducible.py
-      calcular_resultado.py
+      calcular_resultado.py    # includes devolucion vs compensacion (Phase 2)
       validar_coherencia.py
-      tabla_deducibilidad.py
+      tabla_deducibilidad.py   # 22-category table (Phase 2)
+      calcular_isp.py          # Phase 2: Inversion del Sujeto Pasivo
+      calcular_bloque_informativo.py  # Phase 2: casillas 59-63
+      criterio_caja.py         # Phase 2: filtro por cobro/pago
+      actualizar_saldo_iva_compensar.py  # Phase 2: unico modulo con I/O a Supabase
+      calcular_m303.py         # Phase 2: orquestador end-to-end
+      prorrata_alerta.py       # Phase 2: casuistica C07, solo alerta
     models.py         # Pydantic models: Factura, ResultadoM303, etc.
   rpa/
     aeat/

@@ -65,7 +65,7 @@ def facturas_emitidas_perfil_1() -> list[FacturaEmitida]:
 
 def facturas_recibidas_perfil_1() -> list[FacturaRecibida]:
     return [
-        _recibida(PROFILE_1_USER_ID, "software", date(2026, 1, 10), "50.00", 21, "10.50", "100"),
+        _recibida(PROFILE_1_USER_ID, "software_saas", date(2026, 1, 10), "50.00", 21, "10.50", "100"),
     ]
 
 
@@ -79,11 +79,11 @@ def facturas_emitidas_perfil_2() -> list[FacturaEmitida]:
 
 def facturas_recibidas_perfil_2() -> list[FacturaRecibida]:
     return [
-        _recibida(PROFILE_2_USER_ID, "vehiculo", date(2026, 1, 12), "200.00", 21, "42.00", "50"),
+        _recibida(PROFILE_2_USER_ID, "vehiculo_estandar", date(2026, 1, 12), "200.00", 21, "42.00", "50"),
         _recibida(PROFILE_2_USER_ID, "telefono_mixto", date(2026, 1, 15), "60.00", 21, "12.60", "50"),
-        _recibida(PROFILE_2_USER_ID, "comida", date(2026, 1, 20), "50.00", 10, "5.00", "0"),
+        _recibida(PROFILE_2_USER_ID, "comida_profesional", date(2026, 1, 20), "50.00", 10, "5.00", "0"),
         _recibida(PROFILE_2_USER_ID, "cuota_reta", date(2026, 1, 1), "300.00", 0, "0.00", "0"),
-        _recibida(PROFILE_2_USER_ID, "software", date(2026, 1, 22), "80.00", 21, "16.80", "100"),
+        _recibida(PROFILE_2_USER_ID, "software_saas", date(2026, 1, 22), "80.00", 21, "16.80", "100"),
         _recibida(
             PROFILE_2_USER_ID, "equipo_informatico", date(2026, 1, 25), "900.00", 21, "189.00", "100",
             es_bien_inversion=True,
@@ -104,7 +104,7 @@ def facturas_emitidas_perfil_3() -> list[FacturaEmitida]:
 def facturas_recibidas_perfil_3() -> list[FacturaRecibida]:
     return [
         _recibida(
-            PROFILE_3_USER_ID, "software", date(2026, 1, 15), "40.00", 0, "0.00", "100",
+            PROFILE_3_USER_ID, "software_saas", date(2026, 1, 15), "40.00", 0, "0.00", "100",
             nif_proveedor=None, es_isp=True, nombre_proveedor="Google Ireland Ltd",
         ),
     ]

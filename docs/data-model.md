@@ -49,7 +49,7 @@ CREATE TABLE factura_emitida (
   fecha               DATE NOT NULL,
   nif_cliente         TEXT,                         -- NULL if B2C or unknown
   nombre_cliente      TEXT,
-  base_imponible      NUMERIC(12,2) NOT NULL CHECK (base_imponible >= 0),
+  base_imponible      NUMERIC(12,2) NOT NULL CHECK (es_rectificativa OR base_imponible >= 0), -- Phase 2: negative allowed for rectificativas (abonos)
   tipo_iva            SMALLINT NOT NULL CHECK (tipo_iva IN (0, 4, 10, 21)),
   cuota_iva           NUMERIC(12,2) NOT NULL,       -- base_imponible * tipo_iva / 100
   retencion_irpf      NUMERIC(5,2) DEFAULT 0,       -- 7 or 15 typically
@@ -60,6 +60,9 @@ CREATE TABLE factura_emitida (
   cobrada             BOOLEAN DEFAULT TRUE,          -- False if criterio de caja and not yet collected
   fecha_cobro         DATE,                         -- For criterio de caja
   periodo_declarado   TEXT,                         -- '1T_2026', '2T_2026', etc. Set after declaration
+  es_rectificativa    BOOLEAN DEFAULT FALSE,         -- Phase 2: credit-note/correction invoice (casuística C04)
+  factura_original_id UUID REFERENCES factura_emitida(id), -- Phase 2: links a rectificativa to the invoice it corrects
+  cliente_es_empresario_ue BOOLEAN DEFAULT FALSE,    -- Phase 2: distinguishes casilla 62 (B2B service) from casilla 59 (goods/B2C)
   origen              TEXT DEFAULT 'manual'          -- 'manual' | 'ocr' | 'import'
                       CHECK (origen IN ('manual', 'ocr', 'import')),
   ocr_confidence      NUMERIC(3,2),                 -- 0.00-1.00, NULL if manual
@@ -217,6 +220,9 @@ class FacturaEmitida(BaseModel):
     es_isp: bool = False
     es_intracomunitaria: bool = False
     cobrada: bool = True
+    es_rectificativa: bool = False               # Phase 2
+    factura_original_id: UUID | None = None      # Phase 2
+    cliente_es_empresario_ue: bool = False       # Phase 2
 
 class ResultadoM303(BaseModel):
     ejercicio: int

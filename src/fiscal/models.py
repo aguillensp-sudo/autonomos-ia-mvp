@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 NIF_NIE_PATTERN = re.compile(r"^(\d{8}[A-Za-z]|[XYZxyz]\d{7}[A-Za-z])$")
 
@@ -17,6 +17,18 @@ def _validar_nif(value: str | None) -> str | None:
         return value
     if not NIF_NIE_PATTERN.match(value):
         raise ValueError(f"'{value}' is not a valid Spanish NIF/NIE")
+    return value
+
+
+def _validar_nif_proveedor(value: str | None) -> str | None:
+    """Unlike nif/nif_cliente, a supplier is not required to have a Spanish
+    NIF/NIE — foreign suppliers (Google Ireland, Adobe without its Spanish
+    NIF-IVA, etc.) legitimately have a non-Spanish-format identifier, an
+    empty string, or no NIF recorded at all. This is exactly the signal
+    src.fiscal.iva.calcular_isp.detectar_isp() uses to trigger ISP
+    (Art. 84.Uno.2º LIVA) — rejecting these values here would make ISP
+    undetectable. No format is enforced; any string, '', or None is valid.
+    """
     return value
 
 
@@ -38,6 +50,12 @@ class PerfilFiscal(BaseModel):
     domicilio_fiscal: dict
     iban: str | None = None
     fecha_inicio: date
+    # Casuística C07 (prorrata) — MVP: ALERTAR only, per
+    # specs/calculo-iva-completo/design.md. This field is Pydantic-only this
+    # phase (no perfil_fiscal DB column/migration yet) — it exists so
+    # src.fiscal.iva.prorrata_alerta can detect and flag the case without
+    # implementing the actual proportional-deduction calculation (V2 scope).
+    tiene_actividad_mixta: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -62,18 +80,23 @@ class FacturaEmitida(BaseModel):
     cobrada: bool = True
     fecha_cobro: date | None = None
     periodo_declarado: str | None = None
+    es_rectificativa: bool = False
+    factura_original_id: UUID | None = None
+    cliente_es_empresario_ue: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     _validar_nif_cliente = field_validator("nif_cliente")(_validar_nif)
     _validar_fecha = field_validator("fecha")(_validar_fecha_no_futura)
 
-    @field_validator("base_imponible")
-    @classmethod
-    def _base_imponible_no_negativa(cls, value: Decimal) -> Decimal:
-        if value < 0:
-            raise ValueError("base_imponible must be >= 0")
-        return value
+    @model_validator(mode="after")
+    def _base_imponible_no_negativa_salvo_rectificativa(self) -> "FacturaEmitida":
+        # Facturas rectificativas (abonos) legitimately carry a negative
+        # base/cuota per Hoja 3 T04-20 ("con signo negativo si reduce") —
+        # only non-rectificativa invoices must be non-negative.
+        if not self.es_rectificativa and self.base_imponible < 0:
+            raise ValueError("base_imponible must be >= 0 unless es_rectificativa=True")
+        return self
 
 
 class FacturaRecibida(BaseModel):
@@ -100,7 +123,7 @@ class FacturaRecibida(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    _validar_nif_proveedor = field_validator("nif_proveedor")(_validar_nif)
+    _validar_nif_proveedor = field_validator("nif_proveedor")(_validar_nif_proveedor)
     _validar_fecha = field_validator("fecha")(_validar_fecha_no_futura)
 
     @field_validator("base_imponible")
@@ -152,7 +175,14 @@ class ResultadoDevengado(BaseModel):
 
     por_tipo: dict[int, Decimal]
     cuotas: dict[int, Decimal]
+    base_modificacion: Decimal = Decimal("0.00")   # casilla 14
+    cuota_modificacion: Decimal = Decimal("0.00")  # casilla 15
     total: Decimal
+    # casilla 27 = sum(cuotas.values()) + cuota_modificacion. cuota_modificacion
+    # (casilla 15) is part of this total arithmetically, but casillas 14-15 are
+    # a separate block on the M303 form — the RPA (Phase 4) fills casillas
+    # 03/06/09 (regimen general) and 14-15 (modificacion) as distinct fields,
+    # even though both feed into the same casilla 27 sum.
 
 
 class ResultadoDeducible(BaseModel):
