@@ -36,7 +36,11 @@ SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_KEY=eyJ...       # For migrations only
 REDIS_URL=redis://localhost:6379
 LANGSMITH_API_KEY=ls__...
+LANGCHAIN_TRACING_V2=true        # Enables LangSmith tracing (Phase 3 onwards)
+LANGCHAIN_PROJECT=autonomos-ia-mvp
 ```
+
+**`ANTHROPIC_API_KEY`, `LANGSMITH_API_KEY`, `LANGCHAIN_TRACING_V2`, and `LANGCHAIN_PROJECT` are mandatory from Phase 3 (`agente-conversacional`) onwards.** Phases 1–2 (`src/fiscal/`) never call an LLM, so these keys were optional placeholders until then. Starting Phase 3, `src/agent/` and its test suite make real Claude Sonnet 5 calls — tool-calling in `recopilar_datos`, Vision OCR in `ocr.py`, the `interrupt()`/confirmation flow — and real LangSmith tracing via `crear_cliente_anthropic()`. `LANGCHAIN_TRACING_V2=true` turns tracing on and `LANGCHAIN_PROJECT` names the LangSmith project (`autonomos-ia-mvp`) traces are grouped under. Running `pytest tests/agent/` without a valid `ANTHROPIC_API_KEY` fails outright; without `LANGSMITH_API_KEY`/`LANGCHAIN_TRACING_V2` the client falls back to an unwrapped Anthropic client (tests still pass, but tracing is unavailable).
 
 ### 3. Frontend environment
 
@@ -117,6 +121,16 @@ Coverage must be 100% on `src/fiscal/` before any PR.
 # Requires local Supabase running
 pytest tests/integration/ -v
 ```
+
+### Conversational agent tests (Phase 3 onwards)
+
+```bash
+# Requires ANTHROPIC_API_KEY (real Claude Sonnet 5 calls), local Supabase
+# running (checkpointing + Storage), and LANGSMITH_API_KEY for tracing
+pytest tests/agent/ -v --cov=src/agent --cov-branch --cov-report=term-missing
+```
+
+Coverage must be 100% (line + branch) on `src/agent/`, same bar as `src/fiscal/`.
 
 ### Frontend E2E tests (Playwright)
 
@@ -210,6 +224,7 @@ autonomos-ia-mvp/
 - **Fiscal engine is sacred.** Never modify `src/fiscal/` without a failing test first (TDD). A wrong calculation is a legal problem.
 - **RPA selectors in config.** Never hardcode AEAT selectors in Python code. `src/rpa/selectors/aeat_m303.yml` is the only place they live.
 - **Human confirmation is non-negotiable.** The `/api/proceso/p04/confirmar` endpoint must only be called after the user has clicked the ConfirmacionModal. No auto-confirmation under any circumstances.
+- **Phase 3 stops at `confirmado=True`.** The `agente-conversacional` graph (`src/agent/graph.py`) ends at the `notificar` node once the user confirms via the `confirmar` `interrupt()` — it never files anything with the AEAT. Phase 4 (RPA) is a separate, not-yet-built pipeline that picks up from that `confirmado=True` state (persisted via `PostgresSaver` checkpointing, keyed by `thread_id`) and performs the actual Modelo 303 submission.
 
 ## Troubleshooting
 

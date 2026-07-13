@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here, one entry per archived OpenSpec change.
 
+## agente-conversacional (Phase 3 — Agente conversacional P04)
+
+Archived: `specs/archive/agente-conversacional/`
+
+- LangGraph `StateGraph` for P04 (`src/agent/graph.py`): `detectar_periodo` → `verificar_duplicado` → `recopilar_datos` → (`ocr_factura` loop | `calcular`) → `resumir` → `confirmar` → (`recopilar_datos` | `notificar`). 8 nodes, all reachable, no orphans.
+- `EstadoP04` TypedDict (`src/agent/state.py`) — fully JSON-serializable state for `PostgresSaver` checkpointing, including `user_jwt` (RLS, see below).
+- `recopilar_datos` node: Claude Sonnet 5 tool-calling (`agregar_factura_emitida`, `agregar_factura_recibida`, `declarar_sin_actividad`, `declarar_intencion_rectificativa`) — the LLM classifies and requests confirmation for dudoso expense categories, discloses a detected duplicate presentation, but never computes a euro amount itself.
+- OCR module (`src/agent/ocr.py`, `src/agent/nodes/ocr_factura.py`): Claude Vision extraction of invoices with per-field confidence. Fiscal numeric fields that feed `calcular_m303()` (`base_imponible`, `tipo_iva`, `cuota_iva`) always route to `facturas_baja_confianza` for mandatory confirmation, regardless of reported confidence — no invoice is ever auto-accepted via OCR. Confirmation is a **structural `interrupt()` gate inside `recopilar_datos`** (not an LLM tool call the model could skip) — see below.
+- `calcular` node: thin wrapper around Phase 2's `calcular_m303()` — deserializes state into Pydantic models, reads `perfil_fiscal` from Supabase, serializes the result back.
+- `resumir` node: deterministic template rendering (guarantees CA-F3-05 fields are never dropped by LLM paraphrasing) plus a short LLM-generated intro sentence.
+- `confirmar` node: LangGraph `interrupt()` — the only path to `confirmado=True`, verified by code review (not just tests). Two-invocation pattern: trigger, then resume with `Command(resume=...)`.
+- `notificar` node: on cancellation, upserts `presentacion.estado='cancelado'`; on confirmation, hands off without writing to `presentacion` — filing itself is out of scope (Phase 4). Confirmation message never implies filing has started.
+- Checkpointing (`src/agent/checkpointer.py`): `PostgresSaver` against Supabase Postgres, `thread_id = f"{user_id}:P04:{ejercicio}:{periodo}"`. Round-trip verified against a real local Postgres, not mocked.
+- RLS: every Supabase query in `src/agent/` (`verificar_duplicado`, `calcular`, `ocr_factura`, `notificar`) uses a client scoped to the authenticated user's own JWT (`src/agent/supabase_client.py::crear_cliente_usuario`) — never the service role key, so RLS is the actual enforcement mechanism rather than an application-level filter. Includes a new Storage RLS policy (`facturas` bucket) keyed on a `{emitidas|recibidas}/{user_id}/{filename}` path convention.
+- `docs/backend-standards.md` project-structure fix: `src/agent/` (singular, this phase's runtime conversational agent) documented separately from `src/agents/` (plural, external build-time-only harness — CLAUDE.md §5).
+- **145 tests total, 100% coverage (line and branch)** on both `src/fiscal/` (unchanged, no regression) and `src/agent/` (new this phase).
+
+### Adversarial review history (3 passes before archiving)
+
+- **Pass 1** found 3 blockers: (1) OCR-flagged fiscal fields were computed but never actually resolvable back into the declaration — fixed via a `recopilar_datos`-internal resolution flow; (2) all 4 Supabase-touching nodes used the service role key, bypassing RLS entirely — fixed with the user-scoped JWT client above; (3) a detected duplicate presentation (`presentacion_duplicada`) was computed by `verificar_duplicado` but never surfaced to the user — fixed by threading it into the system prompt and adding `declarar_intencion_rectificativa`. Also fixed 1 minor: `notificar`'s confirmation message implied AEAT filing was underway when it wasn't.
+- **Pass 2** found the Pass-1 fix for blocker (1) introduced a **CRITICAL regression**: a bare `recopilar_datos -> recopilar_datos` self-edge is not a LangGraph pause point, so a single `graph.invoke()` re-executed the node (full Claude Sonnet 5 call included) immediately and repeatedly whenever an OCR field remained unconfirmed — empirically reproduced at **10,007 API calls** before crashing with `GraphRecursionError`. Also found 2 medium issues: a system-prompt priority contradiction, and undocumented `user_jwt` expiry risk across a long `interrupt()` pause.
+- **Pass 3** (final, PASS WITH GAPS) verified the actual fix: OCR field confirmation moved to a real `interrupt()` loop inside `recopilar_datos`, positioned strictly before the LLM call, with an early return that skips the LLM call entirely on a confirmation-only resume — closing the CRITICAL finding structurally, not just by testing around it. The prompt contradiction was resolved by removing the now-superseded LLM-facing OCR-confirmation instruction; JWT expiry was documented as an accepted Phase 5 limitation. One LOW finding remains open (no single test yet drives the full graph through both `interrupt()` sites — `recopilar_datos`'s and `confirmar`'s — in one continuous run), tracked as a Phase 5 follow-up.
+
+Satisfies CA-F3-01 through CA-F3-10. Verified via `/verify` and 3 rounds of `/adversarial-review` — see `specs/archive/agente-conversacional/reports/`.
+
 ## calculo-iva-completo (Phase 2 — Motor fiscal P04 completo)
 
 Archived: `specs/archive/calculo-iva-completo/`
