@@ -8,6 +8,7 @@ own anti-duplication rule (CLAUDE.md).
 """
 from pathlib import Path
 
+from src.agent.llm_client import envolver_texto_con_cache
 from src.fiscal.iva.tabla_deducibilidad import TABLA_DEDUCIBILIDAD
 
 _DOMAIN_CONTEXT_PATH = Path(__file__).resolve().parents[3] / "docs" / "domain-context.md"
@@ -64,10 +65,13 @@ def _disclosure_presentacion_duplicada(presentacion_duplicada: bool, csv_present
     )
 
 
-def construir_system_prompt(
-    presentacion_duplicada: bool = False,
-    csv_presentacion_previa: str | None = None,
-) -> str:
+def _construir_prompt_estatico() -> str:
+    """Everything that's byte-for-byte identical across calls for a given
+    process lifetime (glossary, deductibility table, templates, tools) —
+    this is the block Anthropic prompt caching (T01 fix) is applied to. The
+    duplicate-presentation disclosure is NOT here — it varies per call, so
+    it's appended as a separate, uncached block in construir_system_prompt().
+    """
     glosario = _DOMAIN_CONTEXT_PATH.read_text(encoding="utf-8")
 
     return f"""You are the P04 (IVA Trimestral) assistant. You help the autónomo collect
@@ -99,13 +103,10 @@ confirmation before any filing.
 - Never use a Spanish fiscal term that is not defined in the glossary below.
   If the user raises a concept not in the glossary, say you need to check
   and do not invent terminology.
-- Duplicate presentation disclosure (see below): if a duplicate is flagged,
-  disclosing it and asking about a rectificativa is your highest priority —
-  do it before asking about anything else in the conversation.
-
-## Duplicate presentation disclosure (CA-F3-09)
-
-{_disclosure_presentacion_duplicada(presentacion_duplicada, csv_presentacion_previa)}
+- Duplicate presentation disclosure (see the final section below, appended
+  per-call): if a duplicate is flagged there, disclosing it and asking about
+  a rectificativa is your highest priority — do it before asking about
+  anything else in the conversation.
 
 ## Domain glossary and rules (source of truth — docs/domain-context.md)
 
@@ -136,3 +137,29 @@ the user describes. Use `declarar_sin_actividad` only after explicit
 confirmation. Never fabricate a NIF, amount, or date the user did not give
 you.
 """
+
+
+def construir_system_prompt(
+    presentacion_duplicada: bool = False,
+    csv_presentacion_previa: str | None = None,
+) -> list[dict]:
+    """Returns the `system` param as a list of content blocks rather than a
+    plain string (T01 fix — Anthropic prompt caching). The static block
+    (glossary, deductibility table, templates, tools — identical on every
+    call) carries `cache_control: ephemeral`, so Claude serves it from cache
+    instead of reprocessing it on every recopilar_datos call within a
+    conversation. The duplicate-presentation disclosure varies per call (it
+    depends on presentacion_duplicada/csv_presentacion_previa), so it's a
+    separate, uncached trailing block — caching a block requires it to be
+    byte-for-byte identical to the previous call's, which this one isn't.
+    """
+    return [
+        envolver_texto_con_cache(_construir_prompt_estatico()),
+        {
+            "type": "text",
+            "text": (
+                "## Duplicate presentation disclosure (CA-F3-09)\n\n"
+                f"{_disclosure_presentacion_duplicada(presentacion_duplicada, csv_presentacion_previa)}"
+            ),
+        },
+    ]
