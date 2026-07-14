@@ -1,6 +1,7 @@
 """Tests for recopilar_datos node. Acceptance criteria: CA-F3-04, CA-F3-08.
 Makes real calls to the Claude Sonnet 5 API (ANTHROPIC_API_KEY required).
 """
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,6 +20,7 @@ def _estado_con_mensaje(texto: str) -> dict:
     }
 
 
+@pytest.mark.integration
 def test_recopilar_datos_informa_presentacion_duplicada_en_primer_mensaje():
     """Blocker 3 fix (post-adversarial-review, CA-F3-09): when
     presentacion_duplicada=True, the agent's very first message must
@@ -42,6 +44,7 @@ def test_recopilar_datos_informa_presentacion_duplicada_en_primer_mensaje():
     assert "ABCD1234EFGH5678" in ultimo_mensaje_agente["contenido"] or "ya existe" in ultimo_mensaje_agente["contenido"].lower() or "ya presentaste" in ultimo_mensaje_agente["contenido"].lower()
 
 
+@pytest.mark.integration
 def test_recopilar_datos_declarar_intencion_rectificativa_establece_estado():
     estado = {
         "user_id": "user-1",
@@ -61,6 +64,7 @@ def test_recopilar_datos_declarar_intencion_rectificativa_establece_estado():
     assert resultado.get("quiere_rectificativa") is True
 
 
+@pytest.mark.integration
 def test_recopilar_datos_clasifica_restaurante_requiere_confirmacion():
     estado = _estado_con_mensaje(
         "Tengo un gasto de una comida en un restaurante con un cliente, 50 euros de base más 10% de IVA, 5 euros."
@@ -73,6 +77,7 @@ def test_recopilar_datos_clasifica_restaurante_requiere_confirmacion():
     assert factura["requiere_confirmacion"] is True
 
 
+@pytest.mark.integration
 def test_recopilar_datos_clasifica_software_no_requiere_confirmacion():
     estado = _estado_con_mensaje(
         "Pagué una suscripción de software profesional, 20 euros de base más 21% de IVA, 4.20 euros."
@@ -85,6 +90,7 @@ def test_recopilar_datos_clasifica_software_no_requiere_confirmacion():
     assert factura["requiere_confirmacion"] is False
 
 
+@pytest.mark.integration
 def test_recopilar_datos_detecta_sin_actividad():
     estado = _estado_con_mensaje(
         "No he tenido ninguna factura, ni emitida ni recibida, este trimestre. Confirmo que no ha habido ninguna operación."
@@ -93,12 +99,14 @@ def test_recopilar_datos_detecta_sin_actividad():
     assert resultado.get("sin_actividad") is True
 
 
+@pytest.mark.integration
 def test_recopilar_datos_no_declara_sin_actividad_sin_confirmacion_explicita():
     estado = _estado_con_mensaje("Todavía no he mirado mis facturas de este trimestre.")
     resultado = recopilar_datos(estado)
     assert resultado.get("sin_actividad") is not True
 
 
+@pytest.mark.integration
 def test_recopilar_datos_registra_factura_emitida():
     estado = _estado_con_mensaje(
         "He emitido una factura a un cliente por 200 euros de base mas 21% de IVA, 42 euros."

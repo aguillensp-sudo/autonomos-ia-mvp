@@ -73,6 +73,7 @@ def test_user_con_perfil():
     admin.table("saldo_iva_compensar").delete().eq("user_id", user_id).execute()
 
 
+@pytest.mark.integration
 def test_flujo_completo_perfil_1_token_budget(test_user_con_perfil):
     user_id = test_user_con_perfil["id"]
 

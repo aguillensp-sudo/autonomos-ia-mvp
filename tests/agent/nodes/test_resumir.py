@@ -1,6 +1,7 @@
 """Tests for the resumir node. Acceptance criteria: CA-F3-05.
 Makes a real call to the Claude Sonnet 5 API (ANTHROPIC_API_KEY required).
 """
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,6 +26,7 @@ def _estado_con_resultado():
     }
 
 
+@pytest.mark.integration
 def test_resumir_incluye_todos_los_campos_requeridos():
     resultado = resumir(_estado_con_resultado())
     mensaje = resultado["mensaje_resumen"]
@@ -37,6 +39,7 @@ def test_resumir_incluye_todos_los_campos_requeridos():
     assert "2026-04-20" in mensaje  # fecha limite
 
 
+@pytest.mark.integration
 def test_resumir_usa_lenguaje_humano_no_casillas():
     resultado = resumir(_estado_con_resultado())
     mensaje = resultado["mensaje_resumen"].lower()

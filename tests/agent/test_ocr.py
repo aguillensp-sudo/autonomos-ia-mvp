@@ -1,6 +1,7 @@
 """Tests for extraer_factura_ocr. Acceptance criteria: CA-F3-03.
 Makes real calls to Claude Vision (ANTHROPIC_API_KEY required).
 """
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,6 +11,7 @@ from tests.agent._fixtures_ocr import crear_imagen_factura_baja_calidad, crear_i
 from src.agent.ocr import extraer_factura_ocr
 
 
+@pytest.mark.integration
 def test_extraer_factura_ocr_factura_limpia_confianza_alta():
     imagen = crear_imagen_factura_clara()
     resultado = extraer_factura_ocr(imagen, tipo="emitida")
@@ -21,6 +23,7 @@ def test_extraer_factura_ocr_factura_limpia_confianza_alta():
     assert resultado["confianza_tipo_iva"] > 0.8
 
 
+@pytest.mark.integration
 def test_extraer_factura_ocr_imagen_baja_calidad_confianza_baja():
     imagen = crear_imagen_factura_baja_calidad()
     resultado = extraer_factura_ocr(imagen, tipo="emitida")
