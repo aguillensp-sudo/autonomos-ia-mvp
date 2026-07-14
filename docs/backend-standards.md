@@ -66,6 +66,8 @@ src/
       autenticacion.py
       m303_form.py
       justificante.py
+      selectores.py    # Loads aeat_m303.yml — the only module allowed to reference its path
+    casilla_map.py     # Pure adapter: ResultadoM303 -> full AEAT casilla dict (TABLA_CASILLA_DEDUCIBLE)
     selectors/
       aeat_m303.yml   # External selector map — never hardcode selectors in Python
   workers/

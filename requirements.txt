@@ -12,3 +12,7 @@ langgraph-checkpoint-postgres>=2.0
 psycopg[binary,pool]>=3.2
 langsmith>=0.1
 Pillow>=10.4  # test fixtures only: synthesizes invoice images for OCR tests
+PyYAML>=6.0  # SPEC-F4-01: external selector map (src/rpa/selectors/aeat_m303.yml)
+playwright>=1.61  # SPEC-F4-02/04/05: AEAT RPA automation
+arq>=0.28  # SPEC-F4-worker: ARQ + Redis job queue
+pypdf>=6.14  # SPEC-F4-05: justificante PDF text-layer verification

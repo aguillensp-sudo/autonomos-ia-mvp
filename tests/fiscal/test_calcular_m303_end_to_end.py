@@ -221,3 +221,34 @@ def test_calcular_m303_propaga_bloque_informativo_a_casillas():
     assert resultado.casillas["62"] == Decimal("2000.00")
 
     client.table("saldo_iva_compensar").delete().eq("user_id", str(user_id)).eq("ejercicio", EJERCICIO_TEST + 1).execute()
+
+
+def test_calcular_m303_adjunta_devengado_deducible_al_resultado():
+    """SPEC-F4-03 amendment (rpa-aeat): calcular_m303() must retain the
+    ResultadoDevengado/ResultadoDeducible objects it already computes
+    internally, instead of discarding them — Phase 4's casilla_map.py needs
+    the per-rate/per-categoria breakdown to fill casillas 01-09/14-15/28-44,
+    which resultado.casillas alone (a handful of aggregate keys) can't
+    provide. Perfil 1 has invoices at 21%, 10%, and 0%, plus a software_saas
+    deducible expense — exercises both breakdown objects at once."""
+    client = _admin_client()
+    resultado, errores = calcular_m303(
+        client=client,
+        user_id=str(fixtures.PROFILE_1_USER_ID),
+        ejercicio=EJERCICIO_TEST,
+        periodo="1T",
+        perfil_fiscal=_perfil(fixtures.PROFILE_1_USER_ID),
+        facturas_emitidas=fixtures.facturas_emitidas_perfil_1(),
+        facturas_recibidas=fixtures.facturas_recibidas_perfil_1(),
+        fecha_inicio_periodo=date(2026, 1, 1),
+        fecha_fin_periodo=date(2026, 3, 31),
+    )
+    assert errores == []
+
+    assert resultado.devengado is not None
+    assert set(resultado.devengado.por_tipo) >= {21, 10, 0}
+    _assert_cerca(resultado.devengado.cuotas[21], Decimal("630.00"))
+    _assert_cerca(resultado.devengado.cuotas[10], Decimal("90.00"))
+
+    assert resultado.deducible is not None
+    assert "software_saas" in resultado.deducible.por_categoria

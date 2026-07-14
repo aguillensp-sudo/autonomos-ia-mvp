@@ -8,7 +8,13 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from src.fiscal.models import FacturaEmitida, FacturaRecibida
+from src.fiscal.models import (
+    FacturaEmitida,
+    FacturaRecibida,
+    ResultadoDeducible,
+    ResultadoDevengado,
+    ResultadoM303,
+)
 
 
 def _valid_factura_kwargs() -> dict:
@@ -76,3 +82,49 @@ def test_factura_recibida_base_imponible_negativa():
     )
     with pytest.raises(ValidationError):
         FacturaRecibida(**kwargs)
+
+
+def _resultado_m303_kwargs() -> dict:
+    return dict(
+        ejercicio=2026,
+        periodo="1T",
+        total_devengado=Decimal("210.00"),
+        total_deducible=Decimal("50.00"),
+        saldo_compensar_anterior=Decimal("0.00"),
+        resultado=Decimal("160.00"),
+        tipo_resultado="a_ingresar",
+    )
+
+
+def test_resultado_m303_devengado_deducible_opcionales_por_defecto_none():
+    """SPEC-F4-03 amendment (rpa-aeat): existing direct constructions of
+    ResultadoM303 (e.g. tests/integration/test_saldo_iva_compensar.py) omit
+    devengado/deducible entirely — this must keep working unchanged."""
+    resultado = ResultadoM303(**_resultado_m303_kwargs())
+    assert resultado.devengado is None
+    assert resultado.deducible is None
+
+
+def test_resultado_m303_acepta_devengado_deducible_explicitos():
+    devengado = ResultadoDevengado(
+        por_tipo={21: Decimal("1000.00")},
+        cuotas={21: Decimal("210.00")},
+        total=Decimal("210.00"),
+    )
+    deducible = ResultadoDeducible(
+        por_categoria={"software_saas": Decimal("50.00")},
+        base_por_categoria={"software_saas": Decimal("238.10")},
+        total=Decimal("50.00"),
+    )
+    resultado = ResultadoM303(**_resultado_m303_kwargs(), devengado=devengado, deducible=deducible)
+    assert resultado.devengado.por_tipo == {21: Decimal("1000.00")}
+    assert resultado.deducible.por_categoria == {"software_saas": Decimal("50.00")}
+    assert resultado.deducible.base_por_categoria == {"software_saas": Decimal("238.10")}
+
+
+def test_resultado_deducible_base_por_categoria_por_defecto_vacio():
+    """Existing direct constructions of ResultadoDeducible (e.g.
+    tests/fiscal/test_calcular_resultado.py) omit base_por_categoria — must
+    keep working, defaulting to {}."""
+    deducible = ResultadoDeducible(por_categoria={"software": Decimal("48.30")}, total=Decimal("48.30"))
+    assert deducible.base_por_categoria == {}

@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here, one entry per archived OpenSpec change.
 
+## rpa-aeat (Phase 4 — RPA AEAT) — applied, pending `/verify` and `/archive`
+
+Specs: `specs/rpa-aeat/` (not yet archived)
+
+- `src/rpa/selectors/aeat_m303.yml` + `src/rpa/aeat/selectores.py::cargar_selectores()`: the only place Playwright CSS/aria selectors for the AEAT Sede Electrónica live — full casilla-by-casilla map (01-72, 110) plus auth/nav/action selectors.
+- `src/rpa/casilla_map.py::construir_mapa_casillas()`: pure adapter deriving the full AEAT-form casilla dict from Phase 2's `ResultadoM303` — no new fiscal arithmetic. Includes the Product-Owner-approved `TABLA_CASILLA_DEDUCIBLE` (categoria_gasto → casilla-group mapping).
+- `src/rpa/aeat/autenticacion.py`: Cl@ve PIN authentication (Modelo B only — Modelo A/certificate vault out of scope per `openspec/config.yaml`), with NIF verification and a 10-minute session-timeout check.
+- `src/rpa/aeat/m303_form.py`: navigation, all 4 form pages (identificación, devengado, deducible, resultado + bloque informativo), AEAT's own validation step, and submission. T04-E3 (result discrepancy vs. AEAT's own calculation) is a hard stop with ±0.02€ tolerance — never auto-corrected.
+- `src/rpa/aeat/justificante.py`: downloads and verifies the justificante PDF's own text (NIF, modelo, ejercicio, período, CSV, resultado) before uploading to Supabase Storage — never accepted on a mismatch.
+- `src/workers/rpa_worker.py`: T04-E1 (período ya presentado) and T04-E4 (submission failure, with screenshot-on-error) handling; `ejecutar_presentacion`/`procesar_presentacion` ARQ job ties the full flow together, idempotent on re-enqueue via the `presentacion` table's existing `UNIQUE(user_id, proceso, ejercicio, periodo)` constraint.
+- **Prerequisite fix**: `src/agent/nodes/notificar.py`'s `confirmado=True` branch now upserts a `presentacion` row (`estado='confirmado'`) — previously it wrote nothing, leaving F4's worker with no queryable row to pick up.
+- **Two additive Phase 2 fixes found during implementation** (zero new fiscal arithmetic, full regression suite re-verified after each): `ResultadoM303` now optionally carries the `ResultadoDevengado`/`ResultadoDeducible` breakdown objects it already computed but previously discarded; `ResultadoDeducible` gained `base_por_categoria` (the base amount per category, scaled identically to the existing cuota aggregate) since every deducible AEAT casilla group needs a base+cuota pair.
+- Tests never hit real AEAT: Playwright fully mocked throughout, using 4 AEAT response stubs (`tests/rpa/_stubs_aeat.py`) covering success, validation error, período-ya-presentado, and AEAT-unavailable.
+- **202 tests passing this phase** (0 failed, 0 skipped), 100% coverage on `src/fiscal/` (no regression) and 0 missed statements on every new `src/rpa/`/`src/workers/` module.
+- **Explicitly not executed by the agent**: `test_autenticar_clave_pin_sesion_real` (real Cl@ve PIN login against live AEAT) is written and marked `@pytest.mark.integration`, but requires manual Product Owner execution with real NIF/Cl@ve PIN credentials — left unchecked in `tasks.md` until confirmed.
+
+Targets CA-F4-01 through CA-F4-10. Not yet verified via `/verify` or `/adversarial-review` — see `specs/rpa-aeat/reports/`.
+
 ## agente-conversacional (Phase 3 — Agente conversacional P04)
 
 Archived: `specs/archive/agente-conversacional/`

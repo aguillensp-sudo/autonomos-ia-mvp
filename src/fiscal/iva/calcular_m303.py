@@ -71,6 +71,8 @@ def calcular_m303(
     resultado = calcular_resultado_m303(
         ejercicio, periodo, devengado, deducible, saldo_anterior, solicita_devolucion=solicita_devolucion
     )
+    resultado.devengado = devengado
+    resultado.deducible = deducible
     resultado.casillas["12"] = resultado_isp.base_isp
     resultado.casillas["13"] = resultado_isp.cuota_isp_devengada
     resultado.casillas["59"] = bloque.casilla_59

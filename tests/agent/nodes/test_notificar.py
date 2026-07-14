@@ -42,18 +42,27 @@ def test_user_id():
     admin.table("presentacion").delete().eq("user_id", user_id).eq("ejercicio", EJERCICIO_TEST).execute()
 
 
-def test_notificar_confirmado_no_modifica_presentacion(test_user_id):
+def test_notificar_confirmado_escribe_presentacion_para_que_f4_la_recoja(test_user_id):
+    # SPEC-F4-00 (rpa-aeat): confirmado=True now upserts a presentacion row
+    # in estado='confirmado' so Phase 4's ARQ worker has something to pick
+    # up. See tests/agent/nodes/test_notificar_confirma_escribe_presentacion.py
+    # for the full assertion set on the written row's fields.
     estado = {
         "user_id": test_user_id["id"], "user_jwt": test_user_id["jwt"], "ejercicio": EJERCICIO_TEST, "periodo": "1T",
         "confirmado": True, "cancelado": False,
-        "resultado_m303": {"resultado": "100.00", "tipo_resultado": "a_ingresar"},
+        "resultado_m303": {
+            "total_devengado": "100.00", "total_deducible": "0.00",
+            "saldo_compensar_anterior": "0.00", "resultado": "100.00",
+            "tipo_resultado": "a_ingresar", "casillas": {},
+        },
         "mensajes": [],
     }
     notificar(estado)
 
     admin = _admin_client()
-    fila = admin.table("presentacion").select("*").eq("user_id", test_user_id["id"]).eq("ejercicio", EJERCICIO_TEST).execute()
-    assert fila.data == []  # Phase 4 owns the actual filing/write, not this node
+    fila = admin.table("presentacion").select("estado").eq("user_id", test_user_id["id"]).eq("ejercicio", EJERCICIO_TEST).execute()
+    assert len(fila.data) == 1
+    assert fila.data[0]["estado"] == "confirmado"
 
 
 def test_notificar_cancelado_actualiza_estado_bd(test_user_id):
@@ -75,7 +84,11 @@ def test_notificar_confirmado_agrega_mensaje_final(test_user_id):
     estado = {
         "user_id": test_user_id["id"], "user_jwt": test_user_id["jwt"], "ejercicio": EJERCICIO_TEST, "periodo": "1T",
         "confirmado": True, "cancelado": False,
-        "resultado_m303": {"resultado": "100.00", "tipo_resultado": "a_ingresar"},
+        "resultado_m303": {
+            "total_devengado": "100.00", "total_deducible": "0.00",
+            "saldo_compensar_anterior": "0.00", "resultado": "100.00",
+            "tipo_resultado": "a_ingresar", "casillas": {},
+        },
         "mensajes": [],
     }
     resultado = notificar(estado)

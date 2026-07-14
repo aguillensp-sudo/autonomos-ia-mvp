@@ -125,6 +125,35 @@ def construir_mapa_casillas(resultado: ResultadoM303) -> dict[str, Decimal]:
     lines 181-185, which anticipates this exact split since Phase 2."""
 ```
 
+### Amendment (found during implementation, Task 3) — `ResultadoM303` must carry the breakdown objects
+
+`calcular_m303()` (`src/fiscal/iva/calcular_m303.py`) computes `devengado: ResultadoDevengado` and `deducible: ResultadoDeducible` — both hold the full per-rate (`por_tipo`/`cuotas`) and per-category (`por_categoria`) breakdown this adapter needs — but only ever copies a handful of aggregate values into `resultado.casillas` (`12`, `13`, `27`, `45`, `59`-`62`, `70`, `72`, `110`) before discarding both objects. `ResultadoM303` as shipped in Phase 2 has no field holding them, so `construir_mapa_casillas(resultado: ResultadoM303)` as originally specified above has no way to reach the per-rate/per-category data at all.
+
+**Resolution:** two new **optional** fields on `ResultadoM303` (`src/fiscal/models.py`), defaulting to `None` — purely additive, no existing caller or test that constructs `ResultadoM303` without them changes behavior:
+
+```python
+class ResultadoM303(BaseModel):
+    ...
+    casillas: dict[str, Decimal] = {}
+    devengado: ResultadoDevengado | None = None   # F4: per-rate breakdown for casillas 01-15
+    deducible: ResultadoDeducible | None = None    # F4: per-categoria breakdown for casillas 28-44
+```
+
+`calcular_m303()` gains two lines, right after `calcular_resultado_m303()` returns and before its existing `resultado.casillas[...] = ...` assignments:
+
+```python
+resultado.devengado = devengado
+resultado.deducible = deducible
+```
+
+This introduces **zero new fiscal arithmetic** — `devengado`/`deducible` are the exact same already-computed objects `calcular_m303()` already holds in local scope (including the ISP merge at lines 64/67, which happens before this point); they are only now retained instead of discarded. `calcular_resultado.py`'s own function signature and every existing direct construction of `ResultadoM303` (e.g. `tests/integration/test_saldo_iva_compensar.py`) are untouched, since both new fields default to `None`. `construir_mapa_casillas()` reads `resultado.devengado.por_tipo`/`cuotas`/`base_modificacion`/`cuota_modificacion` and `resultado.deducible.por_categoria` for the per-rate/per-category blocks, and falls back to `resultado.casillas` for the aggregate/ISP/informativo values Phase 2 already populates directly.
+
+### Second amendment (found during implementation, Task 3) — `ResultadoDeducible.por_categoria` is cuota-only, casillas need a base+cuota pair
+
+`ResultadoDeducible.por_categoria` (`calcular_iva_deducible()`, `src/fiscal/iva/calcular_deducible.py`) aggregates only the **deductible cuota** per `categoria_gasto` — there is no equivalent base aggregate. But every deducible casilla group on the AEAT form is a base+cuota pair (casilla 28 base / 29 cuota, 30/31, etc.), so the adapter has no base value to write for any deducible group.
+
+**Resolution:** `calcular_iva_deducible()` gains a second aggregate, `base_por_categoria: dict[str, Decimal]`, computed with the exact same scaling already applied to the cuota (`factura.base_imponible * factura.porcentaje_deducible / 100`, quantized to 2 decimals) — the same operation the function already performs for the cuota, just applied to the base instead. `ResultadoDeducible` gains `base_por_categoria: dict[str, Decimal] = {}` (additive, defaults to `{}`, every existing direct construction of `ResultadoDeducible` — e.g. `tests/fiscal/test_calcular_resultado.py`, `tests/fiscal/test_validar_coherencia.py` — is untouched). No new fiscal concept is introduced: it is the same per-invoice scaling factor already used, applied to a value (`base_imponible`) the invoice already carries.
+
 Devengado block (per-rate, from `ResultadoDevengado.por_tipo`/`cuotas`):
 
 | Rate | Base casilla | Tipo casilla | Cuota casilla |

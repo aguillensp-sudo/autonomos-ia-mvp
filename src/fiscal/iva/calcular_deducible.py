@@ -24,6 +24,7 @@ def calcular_iva_deducible(
     ("tabla_deducibilidad.py is a data file, not logic").
     """
     por_categoria: dict[str, Decimal] = {}
+    base_por_categoria: dict[str, Decimal] = {}
 
     for factura in facturas_recibidas:
         cuota_iva = factura.cuota_iva or Decimal("0")
@@ -31,7 +32,16 @@ def calcular_iva_deducible(
         por_categoria[factura.categoria_gasto] = (
             por_categoria.get(factura.categoria_gasto, Decimal("0.00")) + deducible
         )
+        # base_por_categoria (SPEC-F4-03, rpa-aeat): the deductible portion of
+        # the base, scaled by the same porcentaje_deducible as the cuota above
+        # — Phase 4's casilla_map.py needs a base+cuota pair per casilla group
+        # (e.g. casilla 28 base / 29 cuota), which the cuota-only aggregate
+        # above can't provide on its own.
+        base_deducible = (factura.base_imponible * factura.porcentaje_deducible / Decimal("100")).quantize(Decimal("0.01"))
+        base_por_categoria[factura.categoria_gasto] = (
+            base_por_categoria.get(factura.categoria_gasto, Decimal("0.00")) + base_deducible
+        )
 
     total = sum(por_categoria.values(), Decimal("0.00"))
 
-    return ResultadoDeducible(por_categoria=por_categoria, total=total)
+    return ResultadoDeducible(por_categoria=por_categoria, base_por_categoria=base_por_categoria, total=total)
