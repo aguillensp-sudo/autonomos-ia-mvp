@@ -6,9 +6,11 @@ Versión 1.1 · Julio 2026
 
 Este documento recoge las decisiones estratégicas, funcionales y técnicas tomadas durante la fase de definición del proyecto. Es la referencia base para el desarrollo posterior.
 
-> **Changelog v1.1 (Julio 2026):** Añadidas secciones 1.3 (Segmentación de perfiles de autónomo), 1.4 (Competencia y posicionamiento), y 9 (Hoja de ruta por perfil — V2). Actualizada sección 4.1 (OCR: revisión opcional → confirmación obligatoria de campos numéricos fiscales). Añadida nota sobre VERI*FACTU en sección 9.
+> **Changelog v1.1 (Julio 2026):** Añadidas secciones 1.3 (Segmentación de perfiles de autónomo), 1.4 (Competencia y posicionamiento), y 9 (Hoja de ruta por perfil — V2). Actualizada sección 4.1 (OCR: revisión opcional → confirmación obligatoria de campos numéricos fiscales). Añadida nota sobre VERI*FACTU en sección 9. Añadida decisión D11 (gestión de contexto conversacional, sección 8). Corregido bug de prompt caching en F4 (tasa de aciertos 0% → 100% verificado) — fix de ingeniería, no decisión funcional, sin fila propia en sección 8. Recuperado párrafo de apertura de la Sección 1 (contexto del problema), omitido por error en la versión previa.
 
 # 1. CONTEXTO Y OPORTUNIDAD DE MERCADO
+
+El proyecto nace de la observación directa de un problema real: los autónomos en España deben gestionar entre 12 y 20 interacciones anuales con diferentes administraciones públicas —AEAT, Seguridad Social, Ayuntamientos y CCAA— que consumen tiempo, generan estrés y tienen un coste económico directo de entre 600 € y 1.500 € anuales en servicios de gestoría.
 
 ## 1.1 Cifras clave del sector (fuente: Ministerio de Trabajo, SS, ATA)
 
@@ -268,6 +270,7 @@ Las siguientes decisiones están identificadas pero no cerradas. Deben resolvers
 | **D08** | Gestión de nóminas de empleados | Módulo separado de mayor complejidad. Previsto para V2. | **BAJA (V2)** |
 | **D09** | Generación de facturas para Perfil 1 (autónomo analógico) | Módulo conversacional de generación de facturas con VERI*FACTU desde V2. Ver sección 9. | **ALTA — V2** |
 | **D10** | Integración con software de terceros para Perfil 2 | Holded API, Quipu CSV/API, importador XML estándar. V2. | **MEDIA — V2** |
+| **D11** | Gestión del contexto conversacional (resumen + ventana deslizante) | A) Resumen periódico del historial — el agente resume la conversación acumulada en lugar de enviar todos los mensajes anteriores. B) Ventana deslizante — solo se envían los últimos N mensajes relevantes. Criterio de activación: implementar cuando los datos de producción muestren que el promedio de turnos por sesión supera 15-20 turnos. Sin ese dato real, la implementación sería prematura. | **MEDIA — F5, condicionada a datos de producción** |
 
 # 9. HOJA DE RUTA POR PERFIL — V2 (nueva sección v1.1)
 
