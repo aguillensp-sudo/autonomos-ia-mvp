@@ -54,11 +54,11 @@ All Playwright CSS/aria selectors for the AEAT Sede Electrónica live here, neve
 
 ```yaml
 # src/rpa/selectors/aeat_m303.yml
-clave_pin:
-  login_button: "a#accesoClavePin"
-  nif_input: "input#nifPin"
-  pin_input: "input#pinAcceso"
-  submit_button: "button#entrarClave"
+clave_movil:
+  boton_acceso: "a#accesoClaveMovil"
+  qr_elemento: "img#qrCode"
+  url_autenticada_patron: "*sede.agenciatributaria.gob.es*"
+  nif_autenticado_label: "span#nifAutenticado"
 
 navegacion:
   menu_iva: "a[href*='IVA']"
@@ -103,16 +103,36 @@ Loaded once at worker startup via a thin `cargar_selectores() -> dict` helper in
 
 ## SPEC-F4-02 — Authentication (`src/rpa/aeat/autenticacion.py`)
 
-Modelo B (Cl@ve PIN) only — Modelo A (certificate vault) is out of scope per `openspec/config.yaml`.
+### Amendment (correction to the original design — the flow below was wrong)
 
-Flow (mirrors T04-17 in the functional spec, identical to P01's T01-18):
+The original SPEC-F4-02 described a text-entry "Cl@ve PIN" flow (NIF + a typed PIN code submitted directly by the RPA). This does not match how AEAT's real Modelo B authentication works. Corrected per direct Product Owner domain knowledge, before any further authentication code is written.
 
-1. Worker requests a Cl@ve PIN from the user (via the existing notification channel — the user must generate it just before the RPA runs, since it expires in 10 minutes).
-2. `autenticar_clave_pin(nif: str, pin: str, page: Page, selectores: dict) -> SesionAEAT` — navigates to the Cl@ve PIN login, enters NIF + PIN, submits.
-3. Verifies the authenticated NIF shown on the resulting page equals `perfil.nif` — mismatch raises `AutenticacionError`, no further steps run.
-4. Returns `SesionAEAT(activa=True, timestamp_autenticacion=datetime.now(timezone.utc))`.
+**MVP authentication method: Cl@ve Móvil via QR (primary, Modelo B).**
 
-**Session timeout.** The Cl@ve PIN window is 10 minutes from PIN generation, not from AEAT login. `m303_form.py` checks `datetime.now(timezone.utc) - sesion.timestamp_autenticacion < timedelta(minutes=10)` before every AEAT-facing step; on expiry it raises `SesionExpiradaError`, which the worker catches and restarts the flow at authentication (asking the user for a fresh PIN) rather than silently retrying with a dead session.
+1. RPA navigates to the AEAT Sede Electrónica and clicks the Cl@ve access option.
+2. AEAT displays a QR code on screen — the RPA never receives or types a PIN itself.
+3. RPA captures the QR (`capturar_qr_clave(page, selectores) -> bytes`, a screenshot of the QR element).
+4. The QR image is handed to an injected `notificacion_fn(qr_bytes: bytes) -> None` callback — decoupling *how* the user is notified from the authentication flow itself. This phase saves the QR to Supabase Storage and notifies the user to scan it (Phase 5 will display it directly in the chat UI instead — the callback signature doesn't change either way).
+5. The user scans the QR with their own phone's Cl@ve Móvil app — this step happens entirely outside the RPA's control.
+6. RPA waits for AEAT to redirect to the authenticated session: `page.wait_for_url(selectores["clave_movil"]["url_autenticada_patron"], timeout=120_000)` (120 seconds — scanning a QR and confirming on a phone takes longer than typing a PIN, and there's no fixed sub-timeout the way a PIN has).
+7. Verifies the authenticated NIF shown on the resulting page equals `perfil.nif` — mismatch raises `AutenticacionError`, no further steps run.
+8. Returns `SesionAEAT(activa=True, timestamp_autenticacion=datetime.now(timezone.utc))`.
+
+`autenticar_clave_pin()` (text-PIN entry) is removed and replaced by:
+
+```python
+def capturar_qr_clave(page: Page, selectores: dict) -> bytes: ...
+
+def autenticar_clave_movil(
+    nif: str, page: Page, selectores: dict, notificacion_fn: Callable[[bytes], None],
+) -> SesionAEAT: ...
+```
+
+**Fallback method: SMS PIN.** For users without the Cl@ve Móvil app installed, AEAT offers an SMS-delivered PIN as an alternative. **Not implemented this phase** — documented here as a known MVP limitation. Users without Cl@ve Móvil cannot use the RPA filing path until this fallback is built; no selectors are added for it, since there is nothing to select yet.
+
+**Secondary method: certificate digital (Modelo A) — out of scope for MVP**, per `openspec/config.yaml` → `out_of_scope`. V2 would have the RPA select an installed certificate automatically from the OS certificate store; not addressed here.
+
+**Session timeout.** Unchanged from the original design: the Cl@ve session is treated as a 10-minute window from authentication. `m303_form.py` checks `datetime.now(timezone.utc) - sesion.timestamp_autenticacion < timedelta(minutes=10)` before every AEAT-facing step; on expiry it raises `SesionExpiradaError`, which the worker catches and restarts the flow at authentication (a fresh QR must be scanned) rather than silently retrying with a dead session. This is unaffected by the QR-vs-PIN correction — `SesionAEAT`, `AutenticacionError`, `SesionExpiradaError`, and `verificar_sesion_activa()` are unchanged.
 
 ## SPEC-F4-03 — Casilla mapping (`src/rpa/casilla_map.py`)
 
@@ -250,6 +270,8 @@ async def procesar_presentacion(ctx, presentacion_id: str) -> None:
 ```
 
 The worker is enqueued by Phase 5's `/api/proceso/p04/confirmar` endpoint (out of scope here — this change only implements the worker function itself and its ARQ registration, not the enqueueing endpoint). State transitions written to `presentacion.estado`: `confirmado → presentando → presentado | error`. Every transition and every error path re-checks `estado` at the start (idempotency guard) so a re-enqueued job on a row already `presentado` is a no-op, not a duplicate filing.
+
+**Amendment (Task 9.0, following the SPEC-F4-02 QR correction):** `ejecutar_presentacion` no longer takes a `pin` parameter. It builds an internal `notificacion_fn` closure over `guardar_qr_clave(client, user_id, ejercicio, periodo, qr_bytes) -> str`, which uploads the Cl@ve Móvil QR to Supabase Storage (`qr-clave/{user_id}/{ejercicio}_{periodo}.png`) and passes that closure to `autenticar_clave_movil`. Phase 5 will replace this Storage round-trip with displaying the QR directly in the chat UI — `autenticar_clave_movil`'s `notificacion_fn` callback shape doesn't change either way.
 
 ## Fiscal integrity checks applicable this phase (from `openspec/config.yaml`)
 

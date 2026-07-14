@@ -138,7 +138,7 @@ Coverage must be 100% (line + branch) on `src/agent/`, same bar as `src/fiscal/`
 pytest tests/rpa/ tests/workers/ -v --cov=src/rpa --cov=src/workers --cov-branch --cov-report=term-missing
 ```
 
-Playwright is fully mocked in every test above — no real browser session against AEAT is opened, and no live AEAT credentials are required to run this suite. **One exception**: `tests/rpa/aeat/test_autenticacion.py::test_autenticar_clave_pin_sesion_real` is marked `@pytest.mark.integration` and drives a *real* Cl@ve PIN login against the live AEAT Sede Electrónica. It cannot be run by an agent — it requires a human to generate their own Cl@ve PIN (10-minute window) and supply their real NIF at execution time:
+Playwright is fully mocked in every test above — no real browser session against AEAT is opened, and no live AEAT credentials are required to run this suite. **One exception**: `tests/rpa/aeat/test_autenticacion.py::test_autenticar_clave_movil_sesion_real` is marked `@pytest.mark.integration` and drives a *real* Cl@ve Móvil (QR) login against the live AEAT Sede Electrónica. It cannot be run by an agent — it requires a human to supply their real NIF and scan the displayed QR with their own phone's Cl@ve Móvil app:
 
 ```bash
 pytest tests/rpa/aeat/test_autenticacion.py -m integration -v
@@ -250,7 +250,7 @@ supabase stop && supabase start
 ```
 
 **RPA job failing with AEAT session expired:**
-The Cl@ve PIN session lasts 10 minutes. If the user took longer to confirm, the agent will request a new PIN. This is handled in `src/rpa/aeat/autenticacion.py`.
+The Cl@ve Móvil session lasts 10 minutes from authentication. If the user took longer than that to scan the QR and confirm, the job must restart from a fresh QR. This is handled in `src/rpa/aeat/autenticacion.py` (`SesionExpiradaError`).
 
 **GLM-5.2 not responding via DeepInfra:**
 Check DEEPINFRA_API_KEY in `.env`. GLM-5.2 model ID is `Zhipu-AI/GLM-5.2`. Rate limits apply — check DeepInfra dashboard.

@@ -21,7 +21,7 @@ def test_cargar_selectores_devuelve_dict_completo():
     selectores = cargar_selectores()
 
     for clave in (
-        "clave_pin", "navegacion", "pagina_1_identificacion",
+        "clave_movil", "navegacion", "pagina_1_identificacion",
         "pagina_2_devengado", "pagina_3_deducible", "pagina_4_resultado",
         "acciones", "mensajes_error",
     ):

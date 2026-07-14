@@ -7,7 +7,7 @@ import asyncio
 from typing import Any
 
 from src.fiscal.models import PerfilFiscal, ResultadoM303
-from src.rpa.aeat.autenticacion import autenticar_clave_pin
+from src.rpa.aeat.autenticacion import autenticar_clave_movil
 from src.rpa.aeat.justificante import descargar_justificante
 from src.rpa.aeat.m303_form import (
     navegar_a_modelo_303,
@@ -68,12 +68,23 @@ def guardar_screenshot_y_marcar_error(
     return ruta
 
 
+def guardar_qr_clave(client: Any, user_id: str, ejercicio: int, periodo: str, qr_bytes: bytes) -> str:
+    """Saves the Cl@ve Móvil QR to Supabase Storage so the user can be
+    notified to scan it (SPEC-F4-02 amendment). Phase 5 will display it
+    directly in the chat UI instead of this Storage round-trip — the
+    notificacion_fn callback shape autenticar_clave_movil() expects doesn't
+    change either way.
+    """
+    ruta = f"qr-clave/{user_id}/{ejercicio}_{periodo}.png"
+    client.storage.from_("qr-clave").upload(ruta, qr_bytes)
+    return ruta
+
+
 def ejecutar_presentacion(
     client: Any,
     page: Any,
     presentacion_id: str,
     nif: str,
-    pin: str,
     perfil: PerfilFiscal,
     resultado_m303: ResultadoM303,
     metodo_pago: str | None,
@@ -97,8 +108,11 @@ def ejecutar_presentacion(
     user_id, ejercicio, periodo = fila["user_id"], fila["ejercicio"], fila["periodo"]
     client.table("presentacion").update({"estado": "presentando"}).eq("id", presentacion_id).execute()
 
+    def _notificar_qr(qr_bytes: bytes) -> None:
+        guardar_qr_clave(client, user_id, ejercicio, periodo, qr_bytes)
+
     try:
-        sesion = autenticar_clave_pin(nif=nif, pin=pin, page=page, selectores=selectores)
+        sesion = autenticar_clave_movil(nif=nif, page=page, selectores=selectores, notificacion_fn=_notificar_qr)
         navegar_a_modelo_303(page, ejercicio=ejercicio, periodo=periodo, nif_esperado=nif, selectores=selectores)
         rellenar_pagina_identificacion(page, perfil, selectores)
 
@@ -137,7 +151,6 @@ async def procesar_presentacion(ctx: dict, presentacion_id: str) -> dict:
         page=ctx["page"],
         presentacion_id=presentacion_id,
         nif=ctx["nif"],
-        pin=ctx["pin"],
         perfil=ctx["perfil"],
         resultado_m303=ctx["resultado_m303"],
         metodo_pago=ctx.get("metodo_pago"),

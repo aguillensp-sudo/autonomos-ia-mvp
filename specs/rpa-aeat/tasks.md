@@ -64,17 +64,27 @@ Per `design.md` SPEC-F4-03's amendment: `calcular_m303()` computes `ResultadoDev
 - [x] 3.11 Run tests — must pass: `pytest tests/rpa/test_casilla_map.py -v`
 - [x] 3.12 Add a `test_construir_mapa_casillas_no_reimplementa_aritmetica_fiscal` regression test: asserts every value in the returned map is either copied verbatim from a `ResultadoM303`/`ResultadoDevengado`/`ResultadoDeducible` field or a documented pass-through, proving no new `+`/`-`/`*` fiscal arithmetic was introduced in `casilla_map.py`
 
-## 4. Backend: Cl@ve PIN Authentication (SPEC-F4-02)
+## 4. Backend: Cl@ve Móvil (QR) Authentication (SPEC-F4-02)
 
 Acceptance criteria: CA-F4-01
 
-- [x] 4.1 Write failing unit test `test_autenticar_clave_pin_verifica_nif_coincide` (mocked Playwright `Page`): a successful login where the authenticated NIF matches `perfil.nif` returns `SesionAEAT(activa=True, ...)`
-- [x] 4.2 Write failing unit test `test_autenticar_clave_pin_nif_no_coincide_lanza_error`: a mismatch between the authenticated NIF and `perfil.nif` raises `AutenticacionError`, and `SesionAEAT` is never returned
-- [x] 4.3 Write failing unit test `test_sesion_expira_tras_10_minutos`: a `SesionAEAT` with a `timestamp_autenticacion` more than 10 minutes in the past raises `SesionExpiradaError` when checked by the form-filling step
-- [x] 4.4 Verify tests fail: `pytest tests/rpa/aeat/test_autenticacion.py -v`
-- [x] 4.5 Implement `src/rpa/aeat/autenticacion.py` (`autenticar_clave_pin`, `SesionAEAT`, `AutenticacionError`, `SesionExpiradaError`) per `design.md` SPEC-F4-02, using selectors loaded from Task 2
-- [x] 4.6 Run tests — must pass: `pytest tests/rpa/aeat/test_autenticacion.py -v`
-- [ ] 4.7 Write `@pytest.mark.integration` test `test_autenticar_clave_pin_sesion_real` exercising a real Cl@ve PIN login against AEAT. This test is executed MANUALLY by the Product Owner using their own NIF and Cl@ve PIN — it cannot be run by the agent. The agent must: (a) write the test code; (b) mark it `@pytest.mark.integration`; (c) document in the report that execution requires manual Product Owner action with real AEAT credentials; (d) leave it marked `[ ]` until the Product Owner confirms execution.
+### 4.0 — Design correction (found via Product Owner review, before further coding)
+
+The original Task 4 (4.1-4.7 below) implemented a text-entry "Cl@ve PIN" flow (NIF + a typed PIN submitted by the RPA), which does not match how AEAT's real Modelo B authentication works — it's a QR scanned with the Cl@ve Móvil phone app, the RPA never sees or types a PIN. Per `CLAUDE.md` §7, `design.md` SPEC-F4-02 was amended first (Cl@ve Móvil QR primary flow, SMS PIN fallback documented as an MVP limitation, Modelo A/certificate unchanged as out-of-scope V2). This section replaces the original 4.1-4.7 with the corrected flow — the original subtasks are struck through in intent, not left as stale duplicates.
+
+- [x] 4.0.1 Write failing unit test `test_capturar_qr_clave_retorna_screenshot_del_elemento`: `capturar_qr_clave(page, selectores)` returns exactly what `page.locator(qr_elemento).screenshot()` returns
+- [x] 4.0.2 Write failing unit test `test_autenticar_clave_movil_captura_qr_y_llama_notificacion_fn`: the QR bytes are passed to the injected `notificacion_fn` callback, unmodified
+- [x] 4.0.3 Write failing unit test `test_autenticar_clave_movil_espera_redireccion_con_timeout_120s`: `page.wait_for_url()` is called with `selectores["clave_movil"]["url_autenticada_patron"]` and `timeout=120_000`
+- [x] 4.0.4 Write failing unit test `test_autenticar_clave_movil_verifica_nif_coincide`: a successful flow where the authenticated NIF matches `perfil.nif` returns `SesionAEAT(activa=True, ...)`
+- [x] 4.0.5 Write failing unit test `test_autenticar_clave_movil_nif_no_coincide_lanza_error`: a mismatch raises `AutenticacionError`, and `SesionAEAT` is never returned
+- [x] 4.0.6 Write failing unit test `test_sesion_expira_tras_10_minutos` / `test_sesion_dentro_de_10_minutos_no_lanza_error`: unchanged from the original design — `SesionAEAT`'s 10-minute timeout logic is untouched by the QR-vs-PIN correction
+- [x] 4.0.7 Verify tests fail: `pytest tests/rpa/aeat/test_autenticacion.py -v -m "not integration"`
+- [x] 4.0.8 Implement `src/rpa/aeat/autenticacion.py`: remove `autenticar_clave_pin`; add `capturar_qr_clave(page, selectores) -> bytes` and `autenticar_clave_movil(nif, page, selectores, notificacion_fn) -> SesionAEAT` per `design.md` SPEC-F4-02's amendment. `SesionAEAT`/`AutenticacionError`/`SesionExpiradaError`/`verificar_sesion_activa` unchanged.
+- [x] 4.0.9 Update `src/rpa/selectors/aeat_m303.yml`: replace `clave_pin` with `clave_movil` (`boton_acceso`, `qr_elemento`, `url_autenticada_patron`, `nif_autenticado_label`)
+- [x] 4.0.10 Run tests — must pass: `pytest tests/rpa/aeat/test_autenticacion.py -v -m "not integration"`
+- [ ] 4.0.11 Update `test_autenticar_clave_pin_sesion_real` → `test_autenticar_clave_movil_sesion_real`: prompts for real NIF only (no PIN — the user scans the QR with their own phone), launches a real headed browser, drives the real QR flow, waits up to 120s for the redirect. **Manual Product Owner execution only** — the agent writes the test, marks it `@pytest.mark.integration`, and leaves it unchecked `[ ]` until the Product Owner confirms execution.
+
+~~4.1-4.7 (original Cl@ve PIN text-entry flow, superseded by 4.0 above)~~
 
 ## 5. Backend: AEAT Stub Fixtures (SPEC-F4-06)
 
@@ -131,6 +141,15 @@ Acceptance criteria: CA-F4-09
 ## 9. Backend: ARQ Worker Integration
 
 Acceptance criteria: ties CA-F4-01 through CA-F4-09 together into one end-to-end flow
+
+### 9.0 — Amendment (Task 4.0's QR correction propagated here)
+
+`ejecutar_presentacion`/`procesar_presentacion` originally took a `pin: str` parameter and called `autenticar_clave_pin`. Per Task 4.0's design correction, replaced with: no `pin` parameter (the RPA never receives one); a new `guardar_qr_clave(client, user_id, ejercicio, periodo, qr_bytes) -> str` helper uploads the QR to Supabase Storage (`qr-clave/{user_id}/{ejercicio}_{periodo}.png`); `ejecutar_presentacion` builds an internal `notificacion_fn` closure over it and calls `autenticar_clave_movil`.
+
+- [x] 9.0.1 Write failing test `test_guardar_qr_clave_sube_a_storage_path_correcto`
+- [x] 9.0.2 Write failing test `test_ejecutar_presentacion_flujo_exito_guarda_qr_en_storage`
+- [x] 9.0.3 Implement `guardar_qr_clave` and wire the `notificacion_fn` closure into `ejecutar_presentacion`; remove `pin` from `ejecutar_presentacion`/`procesar_presentacion`
+- [x] 9.0.4 Run full worker suite — must pass: `pytest tests/workers/ -v -m "not integration" --cov=src.workers --cov-branch --cov-report=term-missing` (100%)
 
 - [x] 9.1 Write failing integration test `test_procesar_presentacion_flujo_completo_exito` (mocked Playwright throughout, using the Task 5 stubs): a `presentacion` row in `estado='confirmado'` transitions through `presentando` to `presentado`, with `csv_aeat`/`justificante_path` populated
 - [x] 9.2 Write failing integration test `test_procesar_presentacion_flujo_error_marca_estado_error`: any of the T04-E1..E4 paths results in `estado='error'` with a populated `error_code`, never leaves the row stuck in `presentando`

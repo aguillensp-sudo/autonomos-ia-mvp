@@ -10,7 +10,7 @@ import pytest
 
 from src.fiscal.models import PerfilFiscal, ResultadoDeducible, ResultadoDevengado, ResultadoM303
 from src.rpa.aeat.m303_form import ValidacionError
-from src.workers.rpa_worker import ejecutar_presentacion, procesar_presentacion
+from src.workers.rpa_worker import ejecutar_presentacion, guardar_qr_clave, procesar_presentacion
 from tests.rpa._stubs_aeat import respuesta_exito, respuesta_validacion_error
 
 
@@ -74,13 +74,36 @@ def _mock_page(nif="12345678Z", csv="ABCD1234EFGH5678"):
     return page
 
 
+def test_guardar_qr_clave_sube_a_storage_path_correcto():
+    client = MagicMock()
+    ruta = guardar_qr_clave(client, user_id="u1", ejercicio=2026, periodo="1T", qr_bytes=b"fake-qr")
+
+    assert ruta == "qr-clave/u1/2026_1T.png"
+    client.storage.from_.assert_called_once_with("qr-clave")
+    client.storage.from_.return_value.upload.assert_called_once_with(ruta, b"fake-qr")
+
+
+def test_ejecutar_presentacion_flujo_exito_guarda_qr_en_storage(monkeypatch):
+    monkeypatch.setattr("src.rpa.aeat.justificante.extraer_texto_pdf", lambda pdf_bytes: _texto_justificante_valido())
+    client = _mock_client("confirmado")
+    page = _mock_page()
+
+    ejecutar_presentacion(
+        client=client, page=page, presentacion_id="p1", nif="12345678Z",
+        perfil=_perfil(), resultado_m303=_resultado_m303(), metodo_pago=None, nrc=None, iban=None,
+        pdf_bytes=b"fake-pdf",
+    )
+
+    client.storage.from_.assert_any_call("qr-clave")
+
+
 def test_procesar_presentacion_flujo_completo_exito(monkeypatch):
     monkeypatch.setattr("src.rpa.aeat.justificante.extraer_texto_pdf", lambda pdf_bytes: _texto_justificante_valido())
     client = _mock_client("confirmado")
     page = _mock_page()
 
     resultado = ejecutar_presentacion(
-        client=client, page=page, presentacion_id="p1", nif="12345678Z", pin="123456",
+        client=client, page=page, presentacion_id="p1", nif="12345678Z",
         perfil=_perfil(), resultado_m303=_resultado_m303(), metodo_pago=None, nrc=None, iban=None,
         pdf_bytes=b"fake-pdf",
     )
@@ -106,7 +129,7 @@ def test_procesar_presentacion_flujo_error_marca_estado_error(monkeypatch):
 
     with pytest.raises(ValidacionError):
         ejecutar_presentacion(
-            client=client, page=page, presentacion_id="p1", nif="12345678Z", pin="123456",
+            client=client, page=page, presentacion_id="p1", nif="12345678Z",
             perfil=_perfil(), resultado_m303=_resultado_m303(), metodo_pago=None, nrc=None, iban=None,
             pdf_bytes=b"fake-pdf",
         )
@@ -121,7 +144,7 @@ def test_procesar_presentacion_idempotente_si_ya_presentado():
     page = _mock_page()
 
     resultado = ejecutar_presentacion(
-        client=client, page=page, presentacion_id="p1", nif="12345678Z", pin="123456",
+        client=client, page=page, presentacion_id="p1", nif="12345678Z",
         perfil=_perfil(), resultado_m303=_resultado_m303(), metodo_pago=None, nrc=None, iban=None,
         pdf_bytes=b"fake-pdf",
     )
@@ -136,7 +159,7 @@ def test_procesar_presentacion_arq_wrapper_delega_a_ejecutar_presentacion():
     client = _mock_client("presentado")
     page = _mock_page()
     ctx = {
-        "client": client, "page": page, "nif": "12345678Z", "pin": "123456",
+        "client": client, "page": page, "nif": "12345678Z",
         "perfil": _perfil(), "resultado_m303": _resultado_m303(),
         "pdf_bytes": b"fake-pdf",
     }

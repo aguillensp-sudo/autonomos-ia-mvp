@@ -2,11 +2,10 @@
 # The only place Playwright CSS/aria selectors for the AEAT site may live.
 # When AEAT updates their UI, only this file changes — no code changes needed.
 
-clave_pin:
-  login_button: "a#accesoClavePin"
-  nif_input: "input#nifPin"
-  pin_input: "input#pinAcceso"
-  submit_button: "button#entrarClave"
+clave_movil:
+  boton_acceso: "a#accesoClaveMovil"
+  qr_elemento: "img#qrCode"
+  url_autenticada_patron: "*sede.agenciatributaria.gob.es*"
   nif_autenticado_label: "span#nifAutenticado"
 
 navegacion:
