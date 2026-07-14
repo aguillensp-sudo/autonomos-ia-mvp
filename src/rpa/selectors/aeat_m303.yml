@@ -4,7 +4,7 @@
 
 clave_movil:
   boton_acceso: "a#accesoClaveMovil"
-  qr_elemento: "img#qrCode"
+  qr_elemento: "img#imgQRAcceso"  # Verified against live AEAT DOM (Product Owner)
   url_autenticada_patron: "*sede.agenciatributaria.gob.es*"
   nif_autenticado_label: "span#nifAutenticado"
 
