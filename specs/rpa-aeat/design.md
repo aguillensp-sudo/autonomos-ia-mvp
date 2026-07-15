@@ -232,10 +232,48 @@ Sequence (T04-18 through T04-26):
 
 | Error | Detected in | Recovery |
 |---|---|---|
-| **T04-E1** — Período ya presentado | step 1 (`navegar_a_modelo_303`) or the initial worker precheck | Query `presentacion` for an existing row for `(user_id, ejercicio, periodo)`. If found → surface its `csv_aeat`/justificante, do not resubmit. If not found in DB but AEAT reports one exists → set `estado='error'`, `error_code='periodo_ya_presentado_externo'`, flag for manual review (the user may have filed outside the system). Either way, if the user wants to correct it, the worker marks `requiere_rectificativa=True` and stops — P04-R is out of scope for this change. |
-| **T04-E2** — NRC inválido | step 5 (`rellenar_pagina_resultado`, when `metodo_pago='nrc'`) | Validate NRC format (22 alphanumeric chars) before writing to the form. If AEAT itself rejects a well-formed NRC (mismatch with NIF/modelo/ejercicio/periodo/importe), stop, set `error_code='nrc_invalido'`, ask the user to obtain a fresh NRC from their bank — never guess or auto-correct a NRC. |
-| **T04-E3** — Resultado agente ≠ resultado AEAT | steps 3-4 (casilla 27 / casilla 45 cross-check) | Compare casilla-by-casilla. If the difference is ≤ 0.02 € (rounding), proceed. If > 0.02 €, **hard stop — never submit.** Set `estado='error'`, `error_code='discrepancia_resultado'`, `error_detail` includes both values and the differing casilla, and require explicit user decision before any retry. |
-| **T04-E4** — Presentación fuera de plazo / fallo general de envío | step 8 (`presentar`) | Detect via AEAT's response after clicking submit. Save a screenshot to Supabase Storage (`docs/backend-standards.md`'s existing RPA-failure convention), set `estado='error'`, `error_code`, `screenshot_path`. Retry path: worker re-attempts authentication + navigation from scratch (never resubmits against a stale AEAT session) up to a fixed retry count before surfacing to the user; retries never risk a duplicate submission because step 1 always re-checks for an existing `presentacion` row first (same guard as T04-E1). |
+| **T04-E1** — Período ya presentado | The initial worker precheck (see amendment below) — **before** step 1 (`navegar_a_modelo_303`), before any AEAT session is opened | Query `presentacion` for an existing row for `(user_id, ejercicio, periodo)` in `estado='presentado'`. If found → surface its `csv_aeat`/justificante, do not resubmit, do not authenticate. If not found in DB but AEAT reports one exists (surfaced later, mid-flow) → set `estado='error'`, `error_code='periodo_ya_presentado_externo'`, `error_detail` with the AEAT-reported message, flag for manual review (the user may have filed outside the system). Either way, if the user wants to correct it, the worker marks `requiere_rectificativa=True` and stops — P04-R is out of scope for this change. |
+| **T04-E2** — NRC inválido | step 5 (`rellenar_pagina_resultado`, when `metodo_pago='nrc'`) | Validate NRC format (22 alphanumeric chars) before writing to the form. If AEAT itself rejects a well-formed NRC (mismatch with NIF/modelo/ejercicio/periodo/importe), stop, set `error_code='nrc_invalido'`, `error_detail` with the NRC value and the rejection reason, ask the user to obtain a fresh NRC from their bank — never guess or auto-correct a NRC. |
+| **T04-E3** — Resultado agente ≠ resultado AEAT | steps 3-4 (casilla 27 / casilla 45 cross-check) | Compare casilla-by-casilla. If the difference is ≤ 0.02 € (rounding), proceed. If > 0.02 €, **hard stop — never submit.** Set `estado='error'`, `error_code='discrepancia_resultado'`, `error_detail` includes the casilla number, the agent's expected value, and AEAT's calculated value (already carried on `DiscrepanciaResultadoError` as `.casilla`/`.esperado`/`.calculado_aeat` — this amendment requires actually reading and persisting them, not just raising the exception), and require explicit user decision before any retry. |
+| **T04-E4** — Presentación fuera de plazo / fallo general de envío | step 8 (`presentar`) | Detect via AEAT's response after clicking submit. Save a screenshot to Supabase Storage (`docs/backend-standards.md`'s existing RPA-failure convention), set `estado='error'`, `error_code`, `error_detail`, `screenshot_path`. Automatic retry is **out of scope this phase** — see the ARQ worker section's amendment below. A human-triggered re-enqueue of the same job is safe regardless, because the T04-E1 precheck (this table's first row) always re-verifies before any AEAT session is opened again. |
+
+### Amendment (adversarial review, CRITICAL) — `manejar_periodo_ya_presentado()` must actually be called
+
+**Problem found during `/adversarial-review`:** `manejar_periodo_ya_presentado()` exists in `src/workers/rpa_worker.py` and has its own passing unit tests, but is **never called from `ejecutar_presentacion`**. The only guard actually wired into the real flow is `if fila["estado"] != "confirmado": return` — which protects against re-running a job whose *own* row is already `presentado`, but does nothing for the T04-E1 scenario the table above describes: AEAT already has a filing for this `(user_id, ejercicio, periodo)` that our local `presentacion` table has no record of at all (e.g. the user filed manually, outside this system). As shipped, the RPA would proceed through the entire authenticate → fill → validate → submit sequence with zero check for this condition. CA-F4-07 is not met by actual system behavior despite the helper function's own tests passing — those tests only prove the function's internal logic works in isolation, not that the acceptance criterion holds end-to-end.
+
+**Resolution, mandatory before archive:** `ejecutar_presentacion` (`src/workers/rpa_worker.py`) MUST call `manejar_periodo_ya_presentado(client, user_id, ejercicio, periodo)` as its first action after confirming `fila["estado"] == "confirmado"` and **before** `autenticar_clave_movil()` is ever invoked — i.e. before any Cl@ve Móvil session is opened, no QR is captured, no browser navigation happens, if a prior filing is already known:
+
+```python
+def ejecutar_presentacion(...) -> dict:
+    ...
+    fila = client.table("presentacion").select("*").eq("id", presentacion_id).execute().data[0]
+    if fila["estado"] != "confirmado":
+        return {"estado": fila["estado"], "omitido": True}
+
+    user_id, ejercicio, periodo = fila["user_id"], fila["ejercicio"], fila["periodo"]
+
+    chequeo = manejar_periodo_ya_presentado(client, user_id, ejercicio, periodo)
+    if chequeo["presentacion_existente"] is not None:
+        return {
+            "estado": "presentado", "omitido": True,
+            "csv": chequeo["presentacion_existente"]["csv_aeat"],
+            "justificante_path": chequeo["presentacion_existente"]["justificante_path"],
+        }
+    if chequeo["error_code"] is not None:
+        # error_code == "periodo_ya_presentado_externo": AEAT-side check happens
+        # later (mid-flow), this precheck only catches the case a local row
+        # with estado='presentado' already exists under a different id/lookup
+        # path than presentacion_id — proceed to authentication; the true
+        # "AEAT reports one exists but we have no record" case is caught by
+        # a later in-flow check, not this precheck (this precheck only rules
+        # out the case we DO have a record).
+        pass
+
+    client.table("presentacion").update({"estado": "presentando"}).eq("id", presentacion_id).execute()
+    ...
+```
+
+(Exact control flow to be finalized during implementation — the binding requirement is: **no AEAT session opens before this check runs**, and a known-existing filing short-circuits the entire flow without authentication.) See `tasks.md` section 14 for the TDD breakdown, including the mandatory integration-level test that exercises this through `ejecutar_presentacion` itself (not just `manejar_periodo_ya_presentado()` in isolation).
 
 **Card payment.** If `metodo_pago == "tarjeta"`, `m303_form.py` stops immediately before any card-entry step and returns a state requiring the user to complete payment manually inside the (already-authenticated) AEAT session — the RPA never touches card fields, per `feature.md`'s scope note.
 
@@ -244,9 +282,15 @@ Sequence (T04-18 through T04-26):
 After a successful `presentar()`:
 
 1. Click the "descargar justificante" control, capture the PDF stream.
-2. Parse the PDF (text extraction, not OCR — AEAT justificantes are text-layer PDFs) and verify NIF, modelo (303), ejercicio, período, CSV, and resultado all match the values just submitted. Mismatch → `error_code='justificante_no_coincide'`, hard stop (the filing may have succeeded but the artifact can't be trusted — flag for manual verification, do not silently accept).
-3. Upload to Supabase Storage under `justificantes/{user_id}/{ejercicio}_{periodo}.pdf`, mirroring the `{emitidas|recibidas}/{user_id}/{filename}` RLS-path convention established in Phase 3.
+2. Parse the PDF (text extraction, not OCR — AEAT justificantes are text-layer PDFs) and verify NIF, modelo (303), ejercicio, período, CSV, and resultado all match the values just submitted. Mismatch → `error_code='justificante_no_coincide'`, `error_detail` naming which field(s) didn't match and what was expected vs. found, hard stop (the filing may have succeeded but the artifact can't be trusted — flag for manual verification, do not silently accept).
+3. Upload to Supabase Storage under `justificantes/{user_id}/{ejercicio}_{periodo}.pdf`, mirroring the `{emitidas|recibidas}/{user_id}/{filename}` **path naming** convention established in Phase 3 — **the RLS policy itself is separate and does not yet exist for this bucket; see the amendment under "Fiscal integrity checks" below.**
 4. Update the `presentacion` row: `estado='presentado'`, `csv_aeat`, `nrc` (if applicable), `justificante_path`, timestamp.
+
+### Amendment (adversarial review, MEDIUM-1) — `verificar_justificante()` must use anchored matching, not substring containment
+
+**Problem found during `/adversarial-review`:** the shipped `verificar_justificante()` checks each expected value with `valor not in texto_pdf` — raw substring containment. This is unsound for short, generic decimal strings: `resultado="0.00"` (any `sin_actividad` filing, or any filing that happens to end in whole euros) is a substring of `"160.00"`, `"210.00"`, or virtually any PDF page containing decimal amounts at all. A justificante with a **wrong** `resultado` that happens to share those trailing characters with the correct value would pass verification undetected — defeating the exact guarantee this function exists to provide ("never accepted on a mismatch").
+
+**Resolution, mandatory before archive:** replace substring containment with **anchored** matching for every field, not just `resultado` — each expected value must be checked as a complete, delimited token in the extracted text (e.g. a regex requiring non-digit/word-boundary characters on both sides, or extracting the actual "Resultado de la liquidación: X" line and comparing the full extracted number exactly), not merely "is this string present somewhere in the page text." `csv` and `nif` are less exploitable in practice (long, high-entropy strings), but the same anchored approach should apply uniformly rather than trusting entropy to save the check.
 
 ## SPEC-F4-06 — AEAT test stubs (`tests/rpa/_stubs_aeat.py`)
 
@@ -269,12 +313,18 @@ async def procesar_presentacion(ctx, presentacion_id: str) -> None:
     drives it through autenticacion -> m303_form -> justificante."""
 ```
 
-The worker is enqueued by Phase 5's `/api/proceso/p04/confirmar` endpoint (out of scope here — this change only implements the worker function itself and its ARQ registration, not the enqueueing endpoint). State transitions written to `presentacion.estado`: `confirmado → presentando → presentado | error`. Every transition and every error path re-checks `estado` at the start (idempotency guard) so a re-enqueued job on a row already `presentado` is a no-op, not a duplicate filing.
+The worker is enqueued by Phase 5's `/api/proceso/p04/confirmar` endpoint (out of scope here — this change only implements the worker function itself, not the enqueueing endpoint). State transitions written to `presentacion.estado`: `confirmado → presentando → presentado | error`. Every transition and every error path re-checks `estado` at the start (idempotency guard) so a re-enqueued job on a row already `presentado` is a no-op, not a duplicate filing.
 
 **Amendment (Task 9.0, following the SPEC-F4-02 QR correction):** `ejecutar_presentacion` no longer takes a `pin` parameter. It builds an internal `notificacion_fn` closure over `guardar_qr_clave(client, user_id, ejercicio, periodo, qr_bytes) -> str`, which uploads the Cl@ve Móvil QR to Supabase Storage (`qr-clave/{user_id}/{ejercicio}_{periodo}.png`) and passes that closure to `autenticar_clave_movil`. Phase 5 will replace this Storage round-trip with displaying the QR directly in the chat UI — `autenticar_clave_movil`'s `notificacion_fn` callback shape doesn't change either way.
+
+### Amendment (adversarial review, MEDIUM-2) — ARQ retry/registration is explicitly out of scope this phase
+
+**Problem found during `/adversarial-review`:** this section previously implied (and the T04-E4 error-table row explicitly promised) an automatic retry mechanism — "worker re-attempts... up to a fixed retry count." No such mechanism exists: there is no `WorkerSettings` class or any other ARQ job-registration in the codebase, so `procesar_presentacion` cannot actually run as a queued ARQ job yet, let alone retry automatically on failure. "This change only implements the worker function itself and its ARQ registration" (the original wording) was also inaccurate — no registration exists.
+
+**Resolution:** ARQ `WorkerSettings` (queue name, `max_tries`/backoff policy, function registration) and any automatic retry-on-failure behavior are **explicitly deferred to Phase 5**, alongside the enqueueing endpoint itself — both are part of standing up the worker as a real, runnable ARQ process, which only makes sense once Phase 5's endpoint exists to enqueue jobs into it. This phase delivers `ejecutar_presentacion`/`procesar_presentacion` as correct, idempotent, callable functions; it does not deliver a running ARQ worker process. The T04-E4 error-table row above has been corrected to drop the "up to a fixed retry count" claim — the only guarantee this phase makes is that a **manually or externally re-invoked** call (however triggered) is safe, via the T04-E1 precheck (this document's CRITICAL amendment above) and the `estado` idempotency guard.
 
 ## Fiscal integrity checks applicable this phase (from `openspec/config.yaml`)
 
 - *"LangGraph interrupt node present in every graph that leads to AEAT submission"* — satisfied upstream by Phase 3's `confirmar` interrupt; F4 only ever acts on rows already marked `confirmado` by a human via that interrupt, never on its own initiative.
-- *"RLS enabled on every new Supabase table with user_id = auth.uid() policy"* — no new table is created in this change (`presentacion` already has RLS from Phase 1); the Supabase Storage path for justificantes follows the same `{user_id}`-scoped convention as Phase 3's invoice storage, which already has an RLS-equivalent Storage policy.
+- *"RLS enabled on every new Supabase table with user_id = auth.uid() policy"* — no new **table** is created in this change (`presentacion` already has RLS from Phase 1). **Amendment (adversarial review, HIGH-1):** the previous wording here claimed the new Storage buckets this phase writes to "already have an RLS-equivalent Storage policy" — **this was false.** Only Phase 3's `facturas` bucket has an RLS migration (`20260713_140000_facturas_storage_rls.sql`). The three buckets this phase introduces — `justificantes`, `qr-clave`, `screenshots` — have **no RLS policy at all**; only a service-role client can read/write them today, and if any future Phase 5 code queries them with a user-scoped (anon key + JWT) client, access will be denied by default (Supabase Storage denies all `storage.objects` access with no matching policy) — or, if the bucket is ever configured public, the opposite risk applies (no access control at all). **A migration creating per-bucket RLS policies, mirroring `20260713_140000_facturas_storage_rls.sql`'s `(storage.foldername(name))[2] = auth.uid()::text` pattern, for all three buckets is mandatory before archive.** See `tasks.md` section 14.
 - Never presents with an unresolved fiscal discrepancy (T04-E3) — hard stop, no auto-correction, matches the "STOP and alert" language in the functional spec verbatim.
