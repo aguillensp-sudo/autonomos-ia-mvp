@@ -83,15 +83,9 @@ class WorkerSettings:
     functions = [procesar_presentacion]
     max_tries = 3
     retry_delay = 60  # seconds between attempts
-
-    @staticmethod
-    async def on_job_failed(ctx, job_id: str) -> None:
-        """Only re-enqueue if the failure was error_code='sesion_expirada'
-        (CA-F5-03) — every other error_code is terminal, surfaced to the
-        user via presentacion.estado='error', no automatic retry."""
 ```
 
-Retry logic reads the just-written `presentacion.error_code` after a failed attempt: `sesion_expirada` → ARQ retries (a fresh call to `ejecutar_presentacion` re-authenticates from scratch via a new QR, per Phase 4's own idempotency guard — no data is re-entered, since `resultado_m303`/`perfil`/etc. are re-read from the same `presentacion_id`); anything else → `on_job_failed` is a no-op, the row stays `estado='error'` for the user to see via `/estado` or Realtime. This satisfies CA-F5-03 exactly ("agent requests a fresh PIN/QR and completes the presentation without losing any data") without inventing new retry semantics beyond what Phase 4's idempotency guard already supports.
+**Correction (found while implementing):** `arq.worker.Worker` has no `on_job_failed` hook — the sketch above in an earlier draft of this spec referenced one that doesn't exist in ARQ's real API. ARQ's actual retry mechanism is simpler and cruder: **any exception a job function raises triggers an automatic retry** (up to `max_tries`) — there's no built-in way to retry conditionally. Selective retry-only-for-`sesion_expirada` has to be implemented *inside* `procesar_presentacion` itself: catch the exception from `ejecutar_presentacion`, inspect its `codigo_error`, and only **re-raise** (letting ARQ's automatic retry fire) when it's `sesion_expirada` — every other `codigo_error` is caught and swallowed (the job "succeeds" from ARQ's point of view; `presentacion.estado='error'` is already durably written by `ejecutar_presentacion`'s own except-block, so nothing is lost by not retrying). A fresh retried call to `ejecutar_presentacion` re-authenticates from scratch via a new QR, per Phase 4's own idempotency guard — no data is re-entered, since `resultado_m303`/`perfil`/etc. are re-read from the same `presentacion_id`. This satisfies CA-F5-03 exactly ("agent requests a fresh PIN/QR and completes the presentation without losing any data") without inventing retry semantics ARQ doesn't actually support.
 
 ## SPEC-F5-03 — Next-quarter alert scheduling (CA-F5-07)
 

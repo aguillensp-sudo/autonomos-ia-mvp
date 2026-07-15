@@ -23,49 +23,55 @@ Per `design.md`'s amendment: the graph has no native pause point between `verifi
 
 - [x] 1.0.1 Design amendment written (this session) — see `design.md`'s "Amendment (found during implementation, Task 1)"
 
-- [ ] 1.1 Write failing test `test_iniciar_graph_siembra_checkpoint_sin_invocar_recopilar_datos` (mocked checkpointer/graph): `iniciar_graph(user_id, user_jwt) -> dict` returns `thread_id`, `ejercicio`, `periodo`, `fecha_limite`; asserts `graph.update_state` was called with `as_node="verificar_duplicado"` and that no Anthropic client call occurred (proving `recopilar_datos` never ran)
-- [ ] 1.2 Write failing test `test_iniciar_graph_detecta_presentacion_duplicada`: given an existing `presentacion` row in `estado='presentado'` for the detected period, `iniciar_graph` raises `PresentacionDuplicadaError` (mapped to `409` at the router layer)
-- [ ] 1.3 Write failing test `test_enviar_mensaje_primer_turno_avanza_hasta_confirmar` (mocked graph/Anthropic client returning a tool-call + text response): the first `/mensaje` call on a freshly-seeded thread invokes the graph with the user's message appended, and can return a `pendiente="confirmacion"` result in that single call — proving the endpoint doesn't assume a separate "done adding invoices" turn exists
-- [ ] 1.4 Write failing test `test_enviar_mensaje_resume_con_texto_libre_cuando_pausado`: when the thread IS currently paused at an interrupt (e.g. `confirmacion_baja_confianza`), a `{"tipo": "texto", ...}` message resumes via `Command(resume=...)` rather than a fresh `invoke(None, ...)`
-- [ ] 1.5 Write failing test `test_enviar_mensaje_factura_confirmada_actualiza_estado`: a `{"tipo": "factura_confirmada", "factura": {...}}` payload results in `graph.update_state` being called with the reviewed invoice appended to `facturas_emitidas`/`facturas_recibidas`, not a chat turn
-- [ ] 1.6 Write failing test `test_calcular_graph_idempotente_si_ya_calculado`: if the checkpointed state already has `resultado_m303`, `calcular_graph(thread_id, facturas=None)` returns it without re-invoking `calcular`/`resumir`
-- [ ] 1.7 Write failing test `test_calcular_graph_estructurado_fusiona_facturas_y_agrega_mensaje_sintetico`: given `facturas_emitidas`/`facturas_recibidas` arrays and no prior `resultado_m303`, `calcular_graph` merges them via `update_state`, appends the synthetic wrap-up user message, then invokes forward through `recopilar_datos`→`calcular`→`resumir`, landing at the `confirmar` interrupt
-- [ ] 1.8 Write failing test `test_confirmar_graph_resume_interrupt_y_devuelve_confirmado`: `confirmar_graph(thread_id, metodo_pago, iban)` resumes the `confirmar` interrupt and returns `confirmado=True`
-- [ ] 1.9 Verify tests fail: `pytest tests/api/test_graph_runtime.py -v -m "not integration"`
-- [ ] 1.10 Implement `src/api/graph_runtime.py` (`iniciar_graph`, `enviar_mensaje`, `calcular_graph`, `confirmar_graph`, `PresentacionDuplicadaError`) per `design.md` SPEC-F5-01 and its amendment, using `src.agent.checkpointer`/`src.agent.graph.construir_grafo` (Phase 3, unchanged — this module wraps it, never modifies it)
-- [ ] 1.11 Run unit tests (mocked graph/checkpointer) — must pass: `pytest tests/api/test_graph_runtime.py -v -m "not integration" --cov=src.api.graph_runtime --cov-branch --cov-report=term-missing`
+- [x] 1.1 Write failing test `test_iniciar_graph_siembra_checkpoint_sin_invocar_recopilar_datos` (mocked checkpointer/graph): `iniciar_graph(user_id, user_jwt) -> dict` returns `thread_id`, `ejercicio`, `periodo`, `fecha_limite`; asserts `graph.update_state` was called with `as_node="verificar_duplicado"` and that no Anthropic client call occurred (proving `recopilar_datos` never ran)
+- [x] 1.2 Write failing test `test_iniciar_graph_detecta_presentacion_duplicada`: given an existing `presentacion` row in `estado='presentado'` for the detected period, `iniciar_graph` raises `PresentacionDuplicadaError` (mapped to `409` at the router layer)
+- [x] 1.3 Write failing test `test_enviar_mensaje_primer_turno_avanza_hasta_confirmar` (mocked graph/Anthropic client returning a tool-call + text response): the first `/mensaje` call on a freshly-seeded thread invokes the graph with the user's message appended, and can return a `pendiente="confirmacion"` result in that single call — proving the endpoint doesn't assume a separate "done adding invoices" turn exists
+- [x] 1.4 Write failing test `test_enviar_mensaje_resume_con_texto_libre_cuando_pausado`: when the thread IS currently paused at an interrupt (e.g. `confirmacion_baja_confianza`), a `{"tipo": "texto", ...}` message resumes via `Command(resume=...)` rather than a fresh `invoke(None, ...)`
+- [x] 1.5 Write failing test `test_enviar_mensaje_factura_confirmada_actualiza_estado`: a `{"tipo": "factura_confirmada", "factura": {...}}` payload results in `graph.update_state` being called with the reviewed invoice appended to `facturas_emitidas`/`facturas_recibidas`, not a chat turn
+- [x] 1.6 Write failing test `test_calcular_graph_idempotente_si_ya_calculado`: if the checkpointed state already has `resultado_m303`, `calcular_graph(thread_id, facturas=None)` returns it without re-invoking `calcular`/`resumir`
+- [x] 1.7 Write failing test `test_calcular_graph_estructurado_fusiona_facturas_y_agrega_mensaje_sintetico`: given `facturas_emitidas`/`facturas_recibidas` arrays and no prior `resultado_m303`, `calcular_graph` merges them via `update_state`, appends the synthetic wrap-up user message, then invokes forward through `recopilar_datos`→`calcular`→`resumir`, landing at the `confirmar` interrupt
+- [x] 1.8 Write failing test `test_confirmar_graph_resume_interrupt_y_devuelve_confirmado`: `confirmar_graph(thread_id, metodo_pago, iban)` resumes the `confirmar` interrupt and returns `confirmado=True`
+- [x] 1.9 Verify tests fail: `pytest tests/api/test_graph_runtime.py -v -m "not integration"`
+- [x] 1.10 Implement `src/api/graph_runtime.py` (`iniciar_graph`, `enviar_mensaje`, `calcular_graph`, `confirmar_graph`, `PresentacionDuplicadaError`) per `design.md` SPEC-F5-01 and its amendment, using `src.agent.checkpointer`/`src.agent.graph.construir_grafo` (Phase 3, unchanged — this module wraps it, never modifies it)
+- [x] 1.11 Run unit tests (mocked graph/checkpointer) — must pass: `pytest tests/api/test_graph_runtime.py -v -m "not integration" --cov=src.api.graph_runtime --cov-branch --cov-report=term-missing`
 - [ ] 1.12 Write and run `@pytest.mark.integration` test(s) against the REAL graph + real Postgres checkpointer + real Claude Sonnet 5 (mirroring Phase 3's own `test_flujo_completo_perfil_1_token_budget` pattern) proving `iniciar_graph` → `enviar_mensaje` → `calcular_graph`/`confirmar_graph` actually work end-to-end against the live graph, not just mocks — per this task's CRITICAL instruction, these are the ONLY tests in this module allowed to touch a real Anthropic client, and they must be marked so `pytest -m "not integration"` (the default TDD cycle) never runs them
 
 ## 2. Backend: API Endpoints (SPEC-F5-01)
 
 Acceptance criteria: CA-F5-01, CA-F5-02, CA-F5-05
 
-- [ ] 2.1 Write failing test `test_post_iniciar_devuelve_proceso_id_y_periodo` (FastAPI `TestClient`, mocked graph_runtime): `POST /api/proceso/p04/iniciar` returns `200` with `proceso_id`/`ejercicio`/`periodo`/`fecha_limite`
-- [ ] 2.2 Write failing test `test_post_iniciar_presentacion_duplicada_devuelve_409`: `PresentacionDuplicadaError` maps to `409` with the `Error` schema (`error="PRESENTACION_DUPLICADA"`)
-- [ ] 2.3 Write failing test `test_post_facturas_ocr_devuelve_ocr_result`: `POST /api/proceso/p04/facturas/ocr` (multipart) calls `extraer_factura_ocr`, returns `OcrResult` shape; **regression guard**: the existing Phase-1 `POST /api/proceso/p04/facturas` (JSON body) is untouched and still passes its own existing tests
-- [ ] 2.4 Write failing test `test_post_mensaje_texto_libre_y_factura_confirmada`: both payload shapes route correctly through `enviar_mensaje`
-- [ ] 2.5 Write failing test `test_post_calcular_devuelve_resultado_m303`: both the idempotent and the structured-merge paths return `200` with the `ResultadoM303` shape
-- [ ] 2.6 Write failing test `test_post_confirmar_enqueues_arq_job` (mocked ARQ pool): `POST /api/proceso/p04/confirmar` returns `202` with `rpa_job_id`, and `arq_pool.enqueue_job` is called with `procesar_presentacion`/the correct `presentacion_id` **only after** `confirmar_graph` returns `confirmado=True`
-- [ ] 2.7 Write failing test `test_post_confirmar_no_enqueues_si_grafo_no_confirma`: if `confirmar_graph` returns `confirmado=False` (user said "revisar"/"cancelar"), no ARQ job is enqueued — regression guard for the critical negative path
-- [ ] 2.8 Write failing test `test_get_estado_lee_presentacion_directo_de_bd`: `GET /api/proceso/p04/estado/{proceso_id}` reads `presentacion` (mocked Supabase client), returns `ProcesoEstado` shape including `qr_url` when `estado='presentando'`
-- [ ] 2.9 Write failing test `test_get_estado_qr_url_null_si_archivo_no_existe`: a missing/expired QR file at the deterministic path results in `qr_url: null`, not a 500
-- [ ] 2.10 Write failing test `test_get_justificante_devuelve_url_firmada`: `GET /api/proceso/p04/justificante/{proceso_id}` returns a signed URL only when `estado='presentado'`, `404` otherwise
-- [ ] 2.11 Write failing test `test_endpoints_requieren_jwt`: every new endpoint returns `401`/`403` without a valid `Authorization: Bearer` header (regression guard for the existing `AuthedRequest` dependency)
-- [ ] 2.12 Verify tests fail: `pytest tests/api/test_p04_router_f5.py -v`
-- [ ] 2.13 Implement all 6 endpoints in `src/api/routers/p04.py`, calling only `graph_runtime.py` (Task 1) and Supabase — no fiscal arithmetic in the handlers themselves (`fiscal_integrity_checks`)
-- [ ] 2.14 Run tests — must pass: `pytest tests/api/ -v --cov=src.api --cov-branch --cov-report=term-missing`
+- [x] 2.1 Write failing test `test_post_iniciar_devuelve_proceso_id_y_periodo` (FastAPI `TestClient`, mocked graph_runtime): `POST /api/proceso/p04/iniciar` returns `200` with `proceso_id`/`ejercicio`/`periodo`/`fecha_limite`
+- [x] 2.2 Write failing test `test_post_iniciar_presentacion_duplicada_devuelve_409`: `PresentacionDuplicadaError` maps to `409` with the `Error` schema (`error="PRESENTACION_DUPLICADA"`)
+- [x] 2.3 Write failing test `test_post_facturas_ocr_devuelve_ocr_result`: `POST /api/proceso/p04/facturas/ocr` (multipart) calls `extraer_factura_ocr`, returns `OcrResult` shape; **regression guard**: the existing Phase-1 `POST /api/proceso/p04/facturas` (JSON body) is untouched and still passes its own existing tests
+- [x] 2.4 Write failing test `test_post_mensaje_texto_libre_y_factura_confirmada`: both payload shapes route correctly through `enviar_mensaje`
+- [x] 2.5 Write failing test `test_post_calcular_devuelve_resultado_m303`: both the idempotent and the structured-merge paths return `200` with the `ResultadoM303` shape
+- [x] 2.6 Write failing test `test_post_confirmar_enqueues_arq_job` (mocked ARQ pool): `POST /api/proceso/p04/confirmar` returns `202` with `rpa_job_id`, and `arq_pool.enqueue_job` is called with `procesar_presentacion`/the correct `presentacion_id` **only after** `confirmar_graph` returns `confirmado=True`
+- [x] 2.7 Write failing test `test_post_confirmar_no_enqueues_si_grafo_no_confirma`: if `confirmar_graph` returns `confirmado=False` (user said "revisar"/"cancelar"), no ARQ job is enqueued — regression guard for the critical negative path
+- [x] 2.8 Write failing test `test_get_estado_lee_presentacion_directo_de_bd`: `GET /api/proceso/p04/estado/{proceso_id}` reads `presentacion` (mocked Supabase client), returns `ProcesoEstado` shape including `qr_url` when `estado='presentando'`
+- [x] 2.9 Write failing test `test_get_estado_qr_url_null_si_archivo_no_existe`: a missing/expired QR file at the deterministic path results in `qr_url: null`, not a 500
+- [x] 2.10 Write failing test `test_get_justificante_devuelve_url_firmada`: `GET /api/proceso/p04/justificante/{proceso_id}` returns a signed URL only when `estado='presentado'`, `404` otherwise
+- [x] 2.11 Write failing test `test_endpoints_requieren_jwt`: every new endpoint returns `401`/`403` without a valid `Authorization: Bearer` header (regression guard for the existing `AuthedRequest` dependency)
+- [x] 2.12 Verify tests fail: `pytest tests/api/test_p04_router_f5.py -v`
+- [x] 2.13 Implement all 6 endpoints in `src/api/routers/p04.py`, calling only `graph_runtime.py` (Task 1) and Supabase — no fiscal arithmetic in the handlers themselves (`fiscal_integrity_checks`)
+- [x] 2.14 Run tests — must pass: `pytest tests/api/ -v --cov=src.api --cov-branch --cov-report=term-missing`
 
 ## 3. Backend: ARQ `WorkerSettings` + Retry Policy (SPEC-F5-02)
 
 Acceptance criteria: CA-F5-03
 
+### 3.0 — Correction (found during implementation): ARQ has no `on_job_failed` hook
+
+`arq.worker.Worker`'s real API has no such hook — see `design.md`'s correction. Selective retry is implemented inside `procesar_presentacion` itself (catch, inspect `codigo_error`, re-raise only for `sesion_expirada`).
+
+- [x] 3.0.1 Design correction written (this session) — see `design.md` SPEC-F5-02
+
 - [ ] 3.1 Write failing test `test_worker_settings_registra_procesar_presentacion`: `WorkerSettings.functions` includes `procesar_presentacion`, `max_tries=3`
-- [ ] 3.2 Write failing test `test_on_job_failed_reintenta_si_sesion_expirada` (mocked ARQ job context + a `presentacion` row with `error_code='sesion_expirada'`): `on_job_failed` triggers a retry (asserted via the mocked ARQ re-enqueue call, or via ARQ's own retry return contract — whichever the implementation uses)
-- [ ] 3.3 Write failing test `test_on_job_failed_no_reintenta_si_error_code_distinto`: any other `error_code` (e.g. `'discrepancia_resultado'`, `'nrc_invalido'`) results in no retry — regression guard, a fiscal discrepancy must never be silently retried
+- [ ] 3.2 Write failing test `test_procesar_presentacion_relanza_si_sesion_expirada` (mocked `ejecutar_presentacion` raising an exception with `codigo_error="sesion_expirada"`): `procesar_presentacion` re-raises, so ARQ's automatic retry fires
+- [ ] 3.3 Write failing test `test_procesar_presentacion_no_relanza_si_error_code_distinto`: any other `codigo_error` (e.g. `'discrepancia_resultado'`, `'nrc_invalido'`) is caught and swallowed — no re-raise, no ARQ retry — regression guard, a fiscal discrepancy must never be silently retried
 - [ ] 3.4 Write failing test `test_reintento_sesion_expirada_no_pierde_datos_ya_ingresados`: simulates one failed attempt (`sesion_expirada`) followed by a successful retry using the *same* `presentacion_id`/`resultado_m303` — asserts the final `presentacion` row's `total_devengado`/`total_deducible`/`csv_aeat` match the original calculation, proving no data was lost or re-entered (CA-F5-03's exact wording)
-- [ ] 3.5 Verify tests fail: `pytest tests/workers/test_worker_settings.py -v`
-- [ ] 3.6 Implement `WorkerSettings` in `src/workers/rpa_worker.py` per `design.md` SPEC-F5-02
-- [ ] 3.7 Run tests — must pass: `pytest tests/workers/ -v --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
+- [ ] 3.5 Verify tests fail: `pytest tests/workers/test_worker_settings.py -v -m "not integration"`
+- [ ] 3.6 Implement `WorkerSettings` + the catch/re-raise logic in `procesar_presentacion` (`src/workers/rpa_worker.py`) per `design.md` SPEC-F5-02
+- [ ] 3.7 Run tests — must pass: `pytest tests/workers/ -v -m "not integration" --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
 
 ## 4. Backend: Next-Quarter Alert Scheduling + Realtime/QR (SPEC-F5-03, SPEC-F5-04)
 

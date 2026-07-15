@@ -14,6 +14,9 @@ from supabase import Client, create_client
 class AuthedRequest:
     client: Client
     user_id: str
+    jwt: str  # raw JWT — needed by graph_runtime.py to build EstadoP04.user_jwt
+              # (Phase 5, SPEC-F5-01) since agent nodes construct their own
+              # RLS-scoped client from this string, not from `client` above.
 
 
 def _decode_jwt_sub(jwt: str) -> str:
@@ -54,4 +57,4 @@ def get_authed_request(authorization: str | None = Header(default=None)) -> Auth
     client = create_client(url, anon_key)
     client.postgrest.auth(jwt)
     user_id = _decode_jwt_sub(jwt)
-    return AuthedRequest(client=client, user_id=user_id)
+    return AuthedRequest(client=client, user_id=user_id, jwt=jwt)
