@@ -132,6 +132,20 @@ pytest tests/agent/ -v --cov=src/agent --cov-branch --cov-report=term-missing
 
 Coverage must be 100% (line + branch) on `src/agent/`, same bar as `src/fiscal/`.
 
+### RPA / AEAT tests (Phase 4 onwards)
+
+```bash
+pytest tests/rpa/ tests/workers/ -v --cov=src/rpa --cov=src/workers --cov-branch --cov-report=term-missing
+```
+
+Playwright is fully mocked in every test above — no real browser session against AEAT is opened, and no live AEAT credentials are required to run this suite. **One exception**: `tests/rpa/aeat/test_autenticacion.py::test_autenticar_clave_movil_sesion_real` is marked `@pytest.mark.integration` and drives a *real* Cl@ve Móvil (QR) login against the live AEAT Sede Electrónica. It cannot be run by an agent — it requires a human to supply their real NIF and scan the displayed QR with their own phone's Cl@ve Móvil app:
+
+```bash
+pytest tests/rpa/aeat/test_autenticacion.py -m integration -v
+```
+
+`pytest -m "not integration"` (the default TDD cycle) always excludes it.
+
 ### Frontend E2E tests (Playwright)
 
 ```bash
@@ -224,7 +238,9 @@ autonomos-ia-mvp/
 - **Fiscal engine is sacred.** Never modify `src/fiscal/` without a failing test first (TDD). A wrong calculation is a legal problem.
 - **RPA selectors in config.** Never hardcode AEAT selectors in Python code. `src/rpa/selectors/aeat_m303.yml` is the only place they live.
 - **Human confirmation is non-negotiable.** The `/api/proceso/p04/confirmar` endpoint must only be called after the user has clicked the ConfirmacionModal. No auto-confirmation under any circumstances.
-- **Phase 3 stops at `confirmado=True`.** The `agente-conversacional` graph (`src/agent/graph.py`) ends at the `notificar` node once the user confirms via the `confirmar` `interrupt()` — it never files anything with the AEAT. Phase 4 (RPA) is a separate, not-yet-built pipeline that picks up from that `confirmado=True` state (persisted via `PostgresSaver` checkpointing, keyed by `thread_id`) and performs the actual Modelo 303 submission.
+- **Phase 3 stops at `confirmado=True`.** The `agente-conversacional` graph (`src/agent/graph.py`) ends at the `notificar` node once the user confirms via the `confirmar` `interrupt()` — it never files anything with the AEAT. `notificar` upserts a `presentacion` row in `estado='confirmado'` (SPEC-F4-00, added in Phase 4) so the RPA worker has something to pick up.
+- **Phase 4 (`rpa-aeat`) is the RPA module + ARQ worker only — not the enqueueing endpoint.** `src/workers/rpa_worker.py::procesar_presentacion` drives one `presentacion` row through `estado='confirmado' -> presentando -> presentado|error`, but nothing in Phase 4 enqueues that ARQ job. `/api/proceso/p04/confirmar` (Phase 5) is what will actually enqueue it once a chat UI exists — Phase 4 does not touch `src/api/`.
+- **Deducible casilla-group mapping is data, not logic.** `src/rpa/casilla_map.py::TABLA_CASILLA_DEDUCIBLE` (Product-Owner-approved) maps each `categoria_gasto` to its AEAT casilla group (corriente/inversión/intracomunitario). Adding a new expense category updates this file, never `m303_form.py`.
 
 ## Troubleshooting
 
@@ -234,7 +250,7 @@ supabase stop && supabase start
 ```
 
 **RPA job failing with AEAT session expired:**
-The Cl@ve PIN session lasts 10 minutes. If the user took longer to confirm, the agent will request a new PIN. This is handled in `src/rpa/aeat/autenticacion.py`.
+The Cl@ve Móvil session lasts 10 minutes from authentication. If the user took longer than that to scan the QR and confirm, the job must restart from a fresh QR. This is handled in `src/rpa/aeat/autenticacion.py` (`SesionExpiradaError`).
 
 **GLM-5.2 not responding via DeepInfra:**
 Check DEEPINFRA_API_KEY in `.env`. GLM-5.2 model ID is `Zhipu-AI/GLM-5.2`. Rate limits apply — check DeepInfra dashboard.

@@ -1,0 +1,101 @@
+# AEAT Sede Electrónica — Modelo 303 selector map (SPEC-F4-01).
+# The only place Playwright CSS/aria selectors for the AEAT site may live.
+# When AEAT updates their UI, only this file changes — no code changes needed.
+
+clave_movil:
+  boton_acceso: "a#accesoClaveMovil"
+  qr_elemento: "img#imgQRAcceso"  # Verified against live AEAT DOM (Product Owner)
+  url_autenticada_patron: "*sede.agenciatributaria.gob.es*"
+  nif_autenticado_label: "span#nifAutenticado"
+
+navegacion:
+  menu_iva: "a[href*='IVA']"
+  modelo_303: "a[data-modelo='303']"
+  selector_ejercicio: "select#ejercicio"
+  selector_periodo: "select#periodo"
+  pre303_cargar: "button#cargarPre303"
+  pre303_disponible_indicator: "div#pre303Disponible"
+  nif_titular_prellenado: "input#nifTitular"
+  nombre_titular_prellenado: "input#nombreTitular"
+
+pagina_1_identificacion:
+  nif_prellenado: "input#nifTitular"
+  nombre_prellenado: "input#nombreTitular"
+  regimen_general_checkbox: "input#regimenGeneral"
+  regimen_simplificado_checkbox: "input#regimenSimplificado"
+  criterio_caja_checkbox: "input#criterioCaja"
+
+pagina_2_devengado:
+  casilla_150: "input[name='casilla150']"
+  casilla_151: "input[name='casilla151']"
+  casilla_152: "input[name='casilla152']"
+  casilla_01: "input[name='casilla01']"
+  casilla_02: "input[name='casilla02']"
+  casilla_03: "input[name='casilla03']"
+  casilla_04: "input[name='casilla04']"
+  casilla_05: "input[name='casilla05']"
+  casilla_06: "input[name='casilla06']"
+  casilla_07: "input[name='casilla07']"
+  casilla_08: "input[name='casilla08']"
+  casilla_09: "input[name='casilla09']"
+  casilla_12: "input[name='casilla12']"
+  casilla_13: "input[name='casilla13']"
+  casilla_14: "input[name='casilla14']"
+  casilla_15: "input[name='casilla15']"
+  casilla_27: "input[name='casilla27']"
+  casilla_27_aeat_calculada: "span#casilla27Calculada"
+
+pagina_3_deducible:
+  casilla_28: "input[name='casilla28']"
+  casilla_29: "input[name='casilla29']"
+  casilla_30: "input[name='casilla30']"
+  casilla_31: "input[name='casilla31']"
+  casilla_32: "input[name='casilla32']"
+  casilla_33: "input[name='casilla33']"
+  casilla_34: "input[name='casilla34']"
+  casilla_35: "input[name='casilla35']"
+  casilla_36: "input[name='casilla36']"
+  casilla_37: "input[name='casilla37']"
+  casilla_40: "input[name='casilla40']"
+  casilla_41: "input[name='casilla41']"
+  casilla_42: "input[name='casilla42']"
+  casilla_43: "input[name='casilla43']"
+  casilla_44: "input[name='casilla44']"
+  casilla_45: "input[name='casilla45']"
+  casilla_45_aeat_calculada: "span#casilla45Calculada"
+
+pagina_4_resultado:
+  casilla_46: "input[name='casilla46']"
+  casilla_66: "input[name='casilla66']"
+  casilla_69: "input[name='casilla69']"
+  casilla_70: "input[name='casilla70']"
+  casilla_71: "input[name='casilla71']"
+  casilla_72: "input[name='casilla72']"
+  casilla_110: "input[name='casilla110']"
+  casilla_59: "input[name='casilla59']"
+  casilla_60: "input[name='casilla60']"
+  casilla_61: "input[name='casilla61']"
+  casilla_62: "input[name='casilla62']"
+  casilla_63: "input[name='casilla63']"
+  a_compensar_radio: "input#optCompensar"
+  a_devolver_radio: "input#optDevolver"
+  sin_actividad_checkbox: "input#sinActividad"
+  nrc_input: "input#nrc"
+  iban_domiciliacion_input: "input#ibanDomiciliacion"
+  iban_devolucion_input: "input#ibanDevolucion"
+
+acciones:
+  validar_button: "button#validarDeclaracion"
+  presentar_button: "button#presentarDeclaracion"
+  confirmar_firma_button: "button#confirmarFirma"
+  descargar_justificante_button: "a#descargarJustificante"
+  errores_validacion_lista: "ul.erroresValidacion li"
+  csv_presentacion_label: "span#csvPresentacion"
+  nrc_resultado_label: "span#nrcResultado"
+  timestamp_presentacion_label: "span#timestampPresentacion"
+
+mensajes_error:
+  periodo_ya_presentado: ".alerta-error:has-text('ya existe una declaración')"
+  discrepancia_resultado: ".alerta-error:has-text('el resultado no coincide')"
+  nrc_invalido: ".alerta-error:has-text('NRC no válido')"
+  aeat_no_disponible: ".alerta-error:has-text('servicio no disponible')"

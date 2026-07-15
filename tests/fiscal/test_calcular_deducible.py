@@ -100,3 +100,16 @@ def test_calcular_iva_deducible_total_multiples_categorias():
     ]
     resultado = calcular_iva_deducible(gastos, TABLA_DEDUCIBILIDAD)
     assert resultado.total == Decimal("48.30")
+
+
+def test_calcular_iva_deducible_base_por_categoria():
+    """SPEC-F4-03 (rpa-aeat): base_por_categoria scales the base the same way
+    por_categoria scales the cuota — needed so Phase 4 can fill a base+cuota
+    casilla pair per deducible group (e.g. casilla 28 base / 29 cuota)."""
+    gastos = [
+        _gasto("vehiculo_estandar", "200.00", 21, "42.00", "50"),  # base 200 * 50% = 100.00
+        _gasto("software_saas", "100.00", 21, "21.00", "100"),      # base 100 * 100% = 100.00
+    ]
+    resultado = calcular_iva_deducible(gastos, TABLA_DEDUCIBILIDAD)
+    assert resultado.base_por_categoria["vehiculo_estandar"] == Decimal("100.00")
+    assert resultado.base_por_categoria["software_saas"] == Decimal("100.00")

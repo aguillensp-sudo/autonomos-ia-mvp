@@ -190,6 +190,11 @@ class ResultadoDeducible(BaseModel):
 
     por_categoria: dict[str, Decimal]
     total: Decimal
+    # base_por_categoria (SPEC-F4-03, rpa-aeat): the deductible portion of the
+    # base per category, scaled by the same porcentaje_deducible as
+    # por_categoria's cuota. Optional/defaults to {} so any existing direct
+    # construction of ResultadoDeducible without it keeps working.
+    base_por_categoria: dict[str, Decimal] = {}
 
 
 class ResultadoM303(BaseModel):
@@ -201,3 +206,10 @@ class ResultadoM303(BaseModel):
     resultado: Decimal
     tipo_resultado: Literal["a_ingresar", "a_compensar", "a_devolver", "sin_actividad"]
     casillas: dict[str, Decimal] = {}
+    # Optional — populated by calcular_m303() (SPEC-F4-03 amendment, rpa-aeat)
+    # so Phase 4's casilla_map.py can read the per-rate/per-categoria
+    # breakdown these objects hold, which the aggregate `casillas` dict above
+    # doesn't carry. None whenever a caller constructs ResultadoM303 directly
+    # without them (e.g. tests/integration/test_saldo_iva_compensar.py).
+    devengado: ResultadoDevengado | None = None
+    deducible: ResultadoDeducible | None = None
