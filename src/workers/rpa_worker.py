@@ -6,6 +6,7 @@ error handling per design.md SPEC-F4-04's error table.
 import asyncio
 from typing import Any
 
+from src.fiscal.alertas.programar_siguiente_trimestre import programar_alerta_siguiente_trimestre
 from src.fiscal.models import PerfilFiscal, ResultadoM303
 from src.rpa.aeat.autenticacion import autenticar_clave_movil
 from src.rpa.aeat.justificante import descargar_justificante
@@ -172,18 +173,58 @@ async def procesar_presentacion(ctx: dict, presentacion_id: str) -> dict:
     context (set up by the worker process at startup) and runs the
     (synchronous, Playwright sync API) flow in a worker thread so it doesn't
     block the event loop.
+
+    Selective retry (SPEC-F5-02, CA-F5-03): ARQ has no on_job_failed hook —
+    it retries automatically on ANY exception a job function raises, up to
+    WorkerSettings.max_tries. To retry ONLY a `sesion_expirada` failure
+    (never a fiscal discrepancy or other terminal error), this function
+    catches everything from ejecutar_presentacion and re-raises only when
+    codigo_error == "sesion_expirada"; every other case is swallowed here —
+    ejecutar_presentacion's own except-block already durably wrote
+    presentacion.estado='error' before raising, so nothing is lost by not
+    letting ARQ retry it.
     """
-    return await asyncio.to_thread(
-        ejecutar_presentacion,
-        client=ctx["client"],
-        page=ctx["page"],
-        presentacion_id=presentacion_id,
-        nif=ctx["nif"],
-        perfil=ctx["perfil"],
-        resultado_m303=ctx["resultado_m303"],
-        metodo_pago=ctx.get("metodo_pago"),
-        nrc=ctx.get("nrc"),
-        iban=ctx.get("iban"),
-        pdf_bytes=ctx["pdf_bytes"],
-        selectores=ctx.get("selectores"),
-    )
+    try:
+        resultado = await asyncio.to_thread(
+            ejecutar_presentacion,
+            client=ctx["client"],
+            page=ctx["page"],
+            presentacion_id=presentacion_id,
+            nif=ctx["nif"],
+            perfil=ctx["perfil"],
+            resultado_m303=ctx["resultado_m303"],
+            metodo_pago=ctx.get("metodo_pago"),
+            nrc=ctx.get("nrc"),
+            iban=ctx.get("iban"),
+            pdf_bytes=ctx["pdf_bytes"],
+            selectores=ctx.get("selectores"),
+        )
+    except Exception as exc:
+        codigo_error = getattr(exc, "codigo_error", "fallo_presentacion")
+        if codigo_error == "sesion_expirada":
+            raise
+        return {"estado": "error", "error_code": codigo_error}
+
+    if resultado.get("estado") == "presentado" and not resultado.get("omitido"):
+        # SPEC-F5-03 (CA-F5-07): schedule the next quarter's alert — only on
+        # a genuinely fresh completion. ejecutar_presentacion's idempotent
+        # early-return (T04-E1 precheck, `omitido=True`) also reports
+        # estado='presentado' for an already-filed row; scheduling here too
+        # would create a duplicate alerta on every re-enqueued/replayed job.
+        fila = ctx["client"].table("presentacion").select("*").eq("id", presentacion_id).execute().data[0]
+        programar_alerta_siguiente_trimestre(
+            ctx["client"], user_id=fila["user_id"], ejercicio=fila["ejercicio"], periodo=fila["periodo"],
+        )
+
+    return resultado
+
+
+class WorkerSettings:
+    """ARQ worker registration (SPEC-F5-02) — Phase 4 built the callable
+    functions but explicitly deferred this. `max_tries` bounds ARQ's
+    automatic retry (which only ever fires for `sesion_expirada`, per
+    procesar_presentacion's own catch/re-raise above)."""
+
+    functions = [procesar_presentacion]
+    max_tries = 3
+    retry_delay = 60  # seconds between attempts

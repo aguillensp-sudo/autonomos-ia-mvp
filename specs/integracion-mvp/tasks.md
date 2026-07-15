@@ -65,26 +65,26 @@ Acceptance criteria: CA-F5-03
 
 - [x] 3.0.1 Design correction written (this session) — see `design.md` SPEC-F5-02
 
-- [ ] 3.1 Write failing test `test_worker_settings_registra_procesar_presentacion`: `WorkerSettings.functions` includes `procesar_presentacion`, `max_tries=3`
-- [ ] 3.2 Write failing test `test_procesar_presentacion_relanza_si_sesion_expirada` (mocked `ejecutar_presentacion` raising an exception with `codigo_error="sesion_expirada"`): `procesar_presentacion` re-raises, so ARQ's automatic retry fires
-- [ ] 3.3 Write failing test `test_procesar_presentacion_no_relanza_si_error_code_distinto`: any other `codigo_error` (e.g. `'discrepancia_resultado'`, `'nrc_invalido'`) is caught and swallowed — no re-raise, no ARQ retry — regression guard, a fiscal discrepancy must never be silently retried
-- [ ] 3.4 Write failing test `test_reintento_sesion_expirada_no_pierde_datos_ya_ingresados`: simulates one failed attempt (`sesion_expirada`) followed by a successful retry using the *same* `presentacion_id`/`resultado_m303` — asserts the final `presentacion` row's `total_devengado`/`total_deducible`/`csv_aeat` match the original calculation, proving no data was lost or re-entered (CA-F5-03's exact wording)
-- [ ] 3.5 Verify tests fail: `pytest tests/workers/test_worker_settings.py -v -m "not integration"`
-- [ ] 3.6 Implement `WorkerSettings` + the catch/re-raise logic in `procesar_presentacion` (`src/workers/rpa_worker.py`) per `design.md` SPEC-F5-02
-- [ ] 3.7 Run tests — must pass: `pytest tests/workers/ -v -m "not integration" --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
+- [x] 3.1 Write failing test `test_worker_settings_registra_procesar_presentacion`: `WorkerSettings.functions` includes `procesar_presentacion`, `max_tries=3`
+- [x] 3.2 Write failing test `test_procesar_presentacion_relanza_si_sesion_expirada` (mocked `ejecutar_presentacion` raising an exception with `codigo_error="sesion_expirada"`): `procesar_presentacion` re-raises, so ARQ's automatic retry fires
+- [x] 3.3 Write failing test `test_procesar_presentacion_no_relanza_si_error_code_distinto`: any other `codigo_error` (e.g. `'discrepancia_resultado'`, `'nrc_invalido'`) is caught and swallowed — no re-raise, no ARQ retry — regression guard, a fiscal discrepancy must never be silently retried
+- [x] 3.4 Write failing test `test_reintento_sesion_expirada_no_pierde_datos_ya_ingresados`: simulates one failed attempt (`sesion_expirada`) followed by a successful retry using the *same* `presentacion_id`/`resultado_m303` — asserts the final `presentacion` row's `total_devengado`/`total_deducible`/`csv_aeat` match the original calculation, proving no data was lost or re-entered (CA-F5-03's exact wording)
+- [x] 3.5 Verify tests fail: `pytest tests/workers/test_worker_settings.py -v -m "not integration"`
+- [x] 3.6 Implement `WorkerSettings` + the catch/re-raise logic in `procesar_presentacion` (`src/workers/rpa_worker.py`) per `design.md` SPEC-F5-02
+- [x] 3.7 Run tests — must pass: `pytest tests/workers/ -v -m "not integration" --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
 
 ## 4. Backend: Next-Quarter Alert Scheduling + Realtime/QR (SPEC-F5-03, SPEC-F5-04)
 
 Acceptance criteria: CA-F5-07
 
-- [ ] 4.1 Write failing test `test_programar_alerta_siguiente_trimestre_1t_a_2t`: presenting 1T 2026 schedules an `alerta` row for 2T 2026 with the correct `fecha_limite`/`fecha_alerta` (per `docs/domain-context.md`'s deadline table)
-- [ ] 4.2 Write failing test `test_programar_alerta_siguiente_trimestre_4t_a_1t_ano_siguiente`: 4T→1T crosses a calendar year correctly
-- [ ] 4.3 Write failing test `test_procesar_presentacion_llama_programar_alerta_tras_exito`: `procesar_presentacion`, on `estado='presentado'`, calls `programar_alerta_siguiente_trimestre` exactly once; a failed presentation does not schedule an alert
-- [ ] 4.4 Verify tests fail: `pytest tests/fiscal/alertas/ tests/workers/ -k "alerta" -v`
-- [ ] 4.5 Implement `src/fiscal/alertas/programar_siguiente_trimestre.py` and wire the call into `procesar_presentacion`
-- [ ] 4.6 Write the Realtime migration: `ALTER PUBLICATION supabase_realtime ADD TABLE presentacion;` (`src/db/migrations/<timestamp>_presentacion_realtime.sql`, mirrored into `supabase/migrations/`)
-- [ ] 4.7 Apply the migration against local Supabase; confirm via `supabase db diff`/direct query that `presentacion` is in the publication
-- [ ] 4.8 Run tests — must pass: `pytest tests/fiscal/alertas/ tests/workers/ -v --cov=src.fiscal --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
+- [x] 4.1 Write failing test `test_programar_alerta_siguiente_trimestre_1t_a_2t`: presenting 1T 2026 schedules an `alerta` row for 2T 2026 with the correct `fecha_limite`/`fecha_alerta` (per `docs/domain-context.md`'s deadline table)
+- [x] 4.2 Write failing test `test_programar_alerta_siguiente_trimestre_4t_a_1t_ano_siguiente`: 4T→1T crosses a calendar year correctly
+- [x] 4.3 Write failing test `test_procesar_presentacion_llama_programar_alerta_tras_exito`: `procesar_presentacion`, on `estado='presentado'`, calls `programar_alerta_siguiente_trimestre` exactly once; a failed presentation does not schedule an alert
+- [x] 4.4 Verify tests fail: `pytest tests/fiscal/alertas/ tests/workers/ -k "alerta" -v`
+- [x] 4.5 Implement `src/fiscal/alertas/programar_siguiente_trimestre.py` and wire the call into `procesar_presentacion`
+- [x] 4.6 Write the Realtime migration: `ALTER PUBLICATION supabase_realtime ADD TABLE presentacion;` (`src/db/migrations/<timestamp>_presentacion_realtime.sql`, mirrored into `supabase/migrations/`)
+- [x] 4.7 Apply the migration against local Supabase; confirm via `supabase db diff`/direct query that `presentacion` is in the publication
+- [x] 4.8 Run tests — must pass: `pytest tests/fiscal/alertas/ tests/workers/ -v --cov=src.fiscal --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
 
 ## 5. Frontend: Project Scaffold + API Client (prerequisite for Tasks 6-7)
 
