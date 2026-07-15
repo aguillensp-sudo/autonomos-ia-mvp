@@ -50,6 +50,20 @@ def test_verificar_justificante_detecta_discrepancia_csv():
         )
 
 
+def test_verificar_justificante_detecta_resultado_incorrecto_que_comparte_digitos():
+    """14.4 (MEDIUM-1, adversarial review): substring containment would
+    incorrectly pass here, since "0.00" is a literal substring of "160.00".
+    Anchored matching must catch this — 0.00 (sin_actividad) and 160.00 are
+    genuinely different results."""
+    texto = _texto_justificante_valido()  # contains "Resultado de la liquidacion: 160.00"
+    with pytest.raises(JustificanteNoCoincideError):
+        verificar_justificante(
+            texto_pdf=texto,
+            nif="12345678Z", modelo="303", ejercicio=2026, periodo="1T",
+            csv="ABCD1234EFGH5678", resultado="0.00",
+        )
+
+
 def test_extraer_texto_pdf_no_falla_con_pdf_minimo():
     writer = PdfWriter()
     writer.add_blank_page(width=200, height=200)

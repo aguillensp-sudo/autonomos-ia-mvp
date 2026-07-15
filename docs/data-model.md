@@ -159,6 +159,8 @@ CREATE POLICY "user owns declarations" ON presentacion USING (user_id = auth.uid
 CREATE INDEX idx_presentacion_user_proceso ON presentacion (user_id, proceso, ejercicio, periodo);
 ```
 
+**Supabase Storage buckets referenced by `presentacion`** (Phase 4, `rpa-aeat`): `justificantes` (`justificante_path`), `qr-clave` (Cl@ve Móvil QR, not a `presentacion` column — transient, used only during authentication), `screenshots` (`screenshot_path`). All three follow the path convention `{bucket_name}/{user_id}/{filename}` and have `storage.objects` RLS policies scoped to `(storage.foldername(name))[2] = auth.uid()::text` — see `src/db/migrations/20260715_100000_rpa_storage_rls.sql`, mirroring the `facturas` bucket's own policy from Phase 3 (`20260713_140000_facturas_storage_rls.sql`).
+
 ### `saldo_iva_compensar`
 
 Tracks the negative IVA balance to carry forward to next quarter (casilla 110 of next M303).

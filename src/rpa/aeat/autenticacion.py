@@ -17,10 +17,14 @@ class AutenticacionError(Exception):
     """Raised when the NIF shown by AEAT after login doesn't match the
     profile's NIF — never proceed past authentication in that case."""
 
+    codigo_error = "autenticacion_fallida"
+
 
 class SesionExpiradaError(Exception):
     """Raised when a SesionAEAT is used more than SESION_TIMEOUT after
     authentication — the Cl@ve session window is treated as 10 minutes."""
+
+    codigo_error = "sesion_expirada"
 
 
 @dataclass

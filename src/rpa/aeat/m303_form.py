@@ -21,6 +21,8 @@ class ValidacionError(Exception):
     """AEAT's own 'Validar' step returned a non-empty error list — the
     caller must not proceed to presentar()."""
 
+    codigo_error = "validacion_fallida"
+
     def __init__(self, errores: list[str]):
         self.errores = errores
         super().__init__(f"AEAT reportó {len(errores)} error(es) de validación: {errores}")
@@ -30,6 +32,8 @@ class DiscrepanciaResultadoError(Exception):
     """T04-E3 — the agent's computed casilla 27/45 differs from AEAT's own
     calculation by more than TOLERANCIA_DISCREPANCIA. Hard stop, never
     auto-corrected."""
+
+    codigo_error = "discrepancia_resultado"
 
     def __init__(self, casilla: str, esperado: Decimal, calculado_aeat: Decimal):
         self.casilla = casilla
@@ -43,6 +47,8 @@ class DiscrepanciaResultadoError(Exception):
 class NRCInvalidoError(Exception):
     """T04-E2 — the supplied NRC doesn't match the required 22-character
     alphanumeric format. Never guessed or auto-corrected."""
+
+    codigo_error = "nrc_invalido"
 
 
 @dataclass

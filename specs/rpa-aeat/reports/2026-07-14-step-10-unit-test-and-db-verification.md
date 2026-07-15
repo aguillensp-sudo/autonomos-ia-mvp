@@ -75,3 +75,31 @@ Both explicitly marked N/A in `tasks.md`, not silently omitted, per Phase 1/2/3 
 - Final coverage: **100% on `src/fiscal/`; 0 missed statements on `src/rpa/` and `src/workers/`**
 - Blocking issues: none for the agent-executable scope
 - **Explicitly NOT executed — requires manual Product Owner action:** `tests/rpa/aeat/test_autenticacion.py::test_autenticar_clave_pin_sesion_real` (Task 4.7), marked `@pytest.mark.integration` and left unchecked `[ ]` in `tasks.md`. This test exercises a real Cl@ve PIN login against the live AEAT Sede Electrónica and requires a human to generate their own Cl@ve PIN (10-minute window) and supply their real NIF at execution time. The agent cannot and did not run it. The Product Owner must execute it manually (`pytest tests/rpa/aeat/test_autenticacion.py -m integration -v`) and confirm the result before this task can be marked complete.
+
+---
+
+## Addendum (2026-07-15) — 5 findings fixed post-first-adversarial-review (tasks.md Section 14)
+
+Since this report, two follow-up commits landed: the Cl@ve Móvil QR authentication correction (replacing the originally-designed text-PIN flow — see `design.md` SPEC-F4-02's amendment) and a branch-coverage fix for `m303_form.py`. The first `/adversarial-review` pass then found **1 CRITICAL + 2 HIGH + 2 MEDIUM findings**. Per `CLAUDE.md` §7, `design.md`/`tasks.md` were amended first (Section 14), then each fix implemented TDD-first. Summary:
+
+**CRITICAL — `manejar_periodo_ya_presentado()` never called.** The T04-E1 helper existed with its own passing unit tests but was never wired into `ejecutar_presentacion` — the real flow had zero protection against AEAT already having a filing this system doesn't know about; it would authenticate and proceed regardless. Fixed: `ejecutar_presentacion` now calls it immediately after resolving `user_id`/`ejercicio`/`periodo`, **before** any AEAT session (QR capture, authentication, navigation) begins. New test `test_ejecutar_presentacion_detecta_periodo_ya_presentado_no_abre_sesion` asserts `page.locator` is never called when an existing filing is found; a regression test confirms the normal flow is unaffected when nothing is found.
+
+**HIGH-1 — no RLS policy on the 3 new Storage buckets.** `justificantes`, `qr-clave`, `screenshots` had no `storage.objects` policy at all — only the service role could read/write them, and `design.md` incorrectly claimed they had "RLS-equivalent" parity with the `facturas` bucket. Fixed: migration `20260715_100000_rpa_storage_rls.sql` (mirroring `20260713_140000_facturas_storage_rls.sql`'s `(storage.foldername(name))[2] = auth.uid()::text` pattern) applied to local Supabase; 6 new RLS integration tests (`tests/integration/test_rpa_storage_rls.py`) prove a user can read their own file and cannot read another user's, for all three buckets. The three buckets themselves also didn't exist locally yet and had to be created ad hoc (same situation Phase 3 hit with `facturas`).
+
+**HIGH-2 — `error_detail` never written, `error_code` used raw Python class names.** Every error path set `error_code=type(exc).__name__` (e.g. `"DiscrepanciaResultadoError"`) instead of the documented snake_case strings, and never populated `error_detail` at all — a human looking at a stopped `presentacion` row had no way to see what actually went wrong. Fixed: added a `codigo_error` class attribute to all 6 RPA exception classes (`ValidacionError` → `validacion_fallida`, `DiscrepanciaResultadoError` → `discrepancia_resultado`, `NRCInvalidoError` → `nrc_invalido`, `JustificanteNoCoincideError` → `justificante_no_coincide`, `AutenticacionError` → `autenticacion_fallida`, `SesionExpiradaError` → `sesion_expirada`); `ejecutar_presentacion`'s except block now does `getattr(exc, "codigo_error", "fallo_presentacion")` and writes `error_detail=str(exc)`. 5 new tests cover each mapped exception type plus the generic fallback.
+
+**MEDIUM-1 — substring false-positive in `verificar_justificante`.** Raw `in` containment meant `resultado="0.00"` (any `sin_actividad` filing) would spuriously match a PDF actually showing `"160.00"`, since `"0.00"` is a literal substring of `"160.00"` — defeating the exact safety net this function exists to provide. Fixed: `_valor_anclado_presente()` requires non-alphanumeric boundaries on both sides of every expected value (regex with negative lookaround), applied uniformly to all six verified fields, not just `resultado`. New test proves a wrong `resultado` sharing trailing digits with the correct value is now caught.
+
+**MEDIUM-2 — ARQ retry/registration scoping (spec-only).** No code change; `design.md`/`tasks.md` corrected to explicitly defer `WorkerSettings`/automatic-retry to Phase 5, alongside the enqueueing endpoint. Reviewed `feature.md` — it doesn't overstate this, no amendment needed there.
+
+### Final numbers after all 5 fixes
+
+- Full suite: **224 passed, 0 failed, 0 skipped** (13 pre-existing integration tests deselected)
+- Coverage: **100% line + branch on `src/fiscal/`, `src/rpa/`, and `src/workers/`** — 0 missed statements, 0 partial branches anywhere in scope
+- No selector literals introduced outside `aeat_m303.yml`/`selectores.py` (static check still passes)
+- `casilla_map.py` still introduces zero new fiscal arithmetic (unchanged by this remediation)
+
+### Outcome
+
+- CRITICAL + both HIGH + both MEDIUM findings: **RESOLVED**
+- Ready for a second `/adversarial-review` pass before archiving (tasks.md 14.6.3)

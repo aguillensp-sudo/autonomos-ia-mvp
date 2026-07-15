@@ -48,13 +48,16 @@ def manejar_periodo_ya_presentado(client: Any, user_id: str, ejercicio: int, per
 
 
 def guardar_screenshot_y_marcar_error(
-    client: Any, user_id: str, ejercicio: int, periodo: str, screenshot_bytes: bytes, error_code: str
+    client: Any, user_id: str, ejercicio: int, periodo: str, screenshot_bytes: bytes,
+    error_code: str, error_detail: str = "",
 ) -> str:
     """T04-E4 — general submission failure. Saves a screenshot to Supabase
     Storage (per docs/backend-standards.md's RPA-failure convention) and
-    sets presentacion.estado='error' with the given error_code, so the
-    retry path (Task 9) can re-authenticate from scratch rather than
-    resubmitting against a stale session.
+    sets presentacion.estado='error' with the given error_code/error_detail
+    (adversarial review HIGH-2: both must be concrete and human-readable,
+    never a raw Python exception class name), so the retry path can
+    re-authenticate from scratch rather than resubmitting against a stale
+    session.
     """
     ruta = f"screenshots/{user_id}/{ejercicio}_{periodo}.png"
     client.storage.from_("screenshots").upload(ruta, screenshot_bytes)
@@ -62,6 +65,7 @@ def guardar_screenshot_y_marcar_error(
     client.table("presentacion").update({
         "estado": "error",
         "error_code": error_code,
+        "error_detail": error_detail,
         "screenshot_path": ruta,
     }).eq("user_id", user_id).eq("ejercicio", ejercicio).eq("periodo", periodo).execute()
 
@@ -98,6 +102,15 @@ def ejecutar_presentacion(
     already in estado='presentado' is a no-op (the UNIQUE(user_id, proceso,
     ejercicio, periodo) constraint means this row IS the prior successful
     run's result, so a re-enqueued job never resubmits).
+
+    T04-E1 precheck (adversarial review, CRITICAL): before any AEAT session
+    opens, manejar_periodo_ya_presentado() checks whether AEAT already has a
+    filing for this (user_id, ejercicio, periodo) that this system already
+    knows about. If found, short-circuit immediately — no authentication, no
+    navigation, no QR. If not found locally, this does NOT mean AEAT itself
+    has no filing (that case is only ever surfaced mid-flow, by AEAT's own
+    response) — it just means there's nothing to short-circuit on yet, so
+    the flow proceeds normally.
     """
     selectores = selectores or cargar_selectores()
 
@@ -106,6 +119,15 @@ def ejecutar_presentacion(
         return {"estado": fila["estado"], "omitido": True}
 
     user_id, ejercicio, periodo = fila["user_id"], fila["ejercicio"], fila["periodo"]
+
+    chequeo = manejar_periodo_ya_presentado(client, user_id, ejercicio, periodo)
+    if chequeo["presentacion_existente"] is not None:
+        return {
+            "estado": "presentado", "omitido": True,
+            "csv": chequeo["presentacion_existente"]["csv_aeat"],
+            "justificante_path": chequeo["presentacion_existente"]["justificante_path"],
+        }
+
     client.table("presentacion").update({"estado": "presentando"}).eq("id", presentacion_id).execute()
 
     def _notificar_qr(qr_bytes: bytes) -> None:
@@ -132,8 +154,14 @@ def ejecutar_presentacion(
         )
         return {"estado": "presentado", "csv": resultado_presentacion.csv, "justificante_path": ruta}
     except Exception as exc:
+        # error_code (adversarial review HIGH-2): each RPA-specific exception
+        # carries its own documented snake_case `codigo_error`; anything else
+        # (a genuinely unexpected failure) falls back to a generic code
+        # rather than leaking a raw Python class name into the DB.
+        codigo_error = getattr(exc, "codigo_error", "fallo_presentacion")
         guardar_screenshot_y_marcar_error(
-            client, user_id, ejercicio, periodo, screenshot_bytes=b"", error_code=type(exc).__name__
+            client, user_id, ejercicio, periodo, screenshot_bytes=b"",
+            error_code=codigo_error, error_detail=str(exc),
         )
         raise
 

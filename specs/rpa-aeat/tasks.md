@@ -190,43 +190,43 @@ The first `/adversarial-review` pass on this change found 1 CRITICAL, 2 HIGH, an
 
 Acceptance: CA-F4-07 actually holds at the integration level, not just for the isolated helper function. Design ref: `design.md`'s new "Amendment (adversarial review, CRITICAL)" under SPEC-F4-04's error table.
 
-- [ ] 14.1.1 Write failing integration test `test_ejecutar_presentacion_detecta_periodo_ya_presentado_no_abre_sesion` (in `tests/workers/test_rpa_worker.py`): given a `client` mock configured so `manejar_periodo_ya_presentado`'s query returns an existing `presentacion_existente` row, calling `ejecutar_presentacion` returns that row's `csv`/`justificante_path` and **never calls `page.locator` at all** (proving no AEAT session — no auth, no navigation — was ever opened)
-- [ ] 14.1.2 Write failing integration test `test_ejecutar_presentacion_sin_presentacion_previa_continua_flujo_normal`: when `manejar_periodo_ya_presentado` finds nothing, the flow proceeds to authentication exactly as before (regression guard — must not break the existing happy-path tests)
-- [ ] 14.1.3 Verify tests fail: `pytest tests/workers/test_rpa_worker.py -k "periodo_ya_presentado" -v`
-- [ ] 14.1.4 Implement: call `manejar_periodo_ya_presentado(client, user_id, ejercicio, periodo)` in `ejecutar_presentacion` immediately after resolving `user_id`/`ejercicio`/`periodo` from `fila`, and **before** the `_notificar_qr` closure is defined or `autenticar_clave_movil` is called. If `presentacion_existente` is found, return immediately with its `csv_aeat`/`justificante_path`, skip the rest of the flow entirely — no `estado='presentando'` transition, no session.
-- [ ] 14.1.5 Run tests — must pass: `pytest tests/workers/test_rpa_worker.py -v`
-- [ ] 14.1.6 Run the full existing `test_rpa_worker.py`/`test_errores_rpa.py` suite to confirm no regression on the other flows (success, `ValidacionError`, idempotent-if-presentado): `pytest tests/workers/ -v --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
+- [x] 14.1.1 Write failing integration test `test_ejecutar_presentacion_detecta_periodo_ya_presentado_no_abre_sesion` (in `tests/workers/test_rpa_worker.py`): given a `client` mock configured so `manejar_periodo_ya_presentado`'s query returns an existing `presentacion_existente` row, calling `ejecutar_presentacion` returns that row's `csv`/`justificante_path` and **never calls `page.locator` at all** (proving no AEAT session — no auth, no navigation — was ever opened)
+- [x] 14.1.2 Write failing integration test `test_ejecutar_presentacion_sin_presentacion_previa_continua_flujo_normal`: when `manejar_periodo_ya_presentado` finds nothing, the flow proceeds to authentication exactly as before (regression guard — must not break the existing happy-path tests)
+- [x] 14.1.3 Verify tests fail: `pytest tests/workers/test_rpa_worker.py -k "periodo_ya_presentado" -v`
+- [x] 14.1.4 Implement: call `manejar_periodo_ya_presentado(client, user_id, ejercicio, periodo)` in `ejecutar_presentacion` immediately after resolving `user_id`/`ejercicio`/`periodo` from `fila`, and **before** the `_notificar_qr` closure is defined or `autenticar_clave_movil` is called. If `presentacion_existente` is found, return immediately with its `csv_aeat`/`justificante_path`, skip the rest of the flow entirely — no `estado='presentando'` transition, no session.
+- [x] 14.1.5 Run tests — must pass: `pytest tests/workers/test_rpa_worker.py -v`
+- [x] 14.1.6 Run the full existing `test_rpa_worker.py`/`test_errores_rpa.py` suite to confirm no regression on the other flows (success, `ValidacionError`, idempotent-if-presentado): `pytest tests/workers/ -v --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
 
 ### 14.2 — HIGH-1: Storage RLS migration for the 3 new buckets
 
 Acceptance: `justificantes`, `qr-clave`, `screenshots` each have a `storage.objects` RLS policy scoped to `(storage.foldername(name))[2] = auth.uid()::text`, mirroring `20260713_140000_facturas_storage_rls.sql`. Design ref: `design.md`'s amended "Fiscal integrity checks" section (HIGH-1) and SPEC-F4-05 point 3.
 
-- [ ] 14.2.1 Write the migration `src/db/migrations/<timestamp>_rpa_storage_rls.sql`: `CREATE POLICY` pairs (SELECT + INSERT, matching the existing `facturas` migration's shape) for all three buckets: `justificantes`, `qr-clave`, `screenshots`
-- [ ] 14.2.2 Apply the migration against the local/test Supabase instance and confirm no errors
-- [ ] 14.2.3 Write an integration test (or extend an existing RLS test, mirroring `tests/integration/test_rls.py`'s pattern) proving a user-scoped client can read/write only their own path under each of the three buckets, and cannot read another user's path
-- [ ] 14.2.4 Run the new RLS test(s) — must pass
-- [ ] 14.2.5 Update `docs/data-model.md` or wherever Storage buckets are documented to list the three buckets and their RLS policy, if not already covered
+- [x] 14.2.1 Write the migration `src/db/migrations/<timestamp>_rpa_storage_rls.sql`: `CREATE POLICY` pairs (SELECT + INSERT, matching the existing `facturas` migration's shape) for all three buckets: `justificantes`, `qr-clave`, `screenshots`
+- [x] 14.2.2 Apply the migration against the local/test Supabase instance and confirm no errors
+- [x] 14.2.3 Write an integration test (or extend an existing RLS test, mirroring `tests/integration/test_rls.py`'s pattern) proving a user-scoped client can read/write only their own path under each of the three buckets, and cannot read another user's path
+- [x] 14.2.4 Run the new RLS test(s) — must pass
+- [x] 14.2.5 Update `docs/data-model.md` or wherever Storage buckets are documented to list the three buckets and their RLS policy, if not already covered
 
 ### 14.3 — HIGH-2: `error_code` (snake_case) and `error_detail` on every error path
 
 Acceptance: every place `presentacion.estado` is set to `'error'` writes both a snake_case `error_code` matching `design.md`'s error table strings, and a non-null `error_detail` with concrete, human-readable context (casilla/expected/actual for T04-E3, NRC value + reason for T04-E2, mismatched field(s) for the justificante check, AEAT message for T04-E1/E4). Design ref: `design.md`'s amended T04-E1 through T04-E4 rows and SPEC-F4-05 point 2.
 
-- [ ] 14.3.1 Write failing test `test_ejecutar_presentacion_discrepancia_resultado_escribe_error_code_y_detail`: when `rellenar_pagina_devengado`/`_deducible` raises `DiscrepanciaResultadoError`, the `presentacion` row is updated with `error_code='discrepancia_resultado'` (not the Python class name) and `error_detail` containing the casilla number and both values
-- [ ] 14.3.2 Write failing test `test_ejecutar_presentacion_nrc_invalido_escribe_error_code_y_detail`: `NRCInvalidoError` → `error_code='nrc_invalido'`, `error_detail` naming the NRC and the reason
-- [ ] 14.3.3 Write failing test `test_ejecutar_presentacion_error_generico_aeat_escribe_error_code_y_detail`: any other/unexpected exception → a documented fallback `error_code` (e.g. `'fallo_presentacion'`, not a raw Python class name) with `error_detail` set to the exception's message
-- [ ] 14.3.4 Write failing test `test_descargar_justificante_discrepancia_escribe_error_detail_con_campos`: `JustificanteNoCoincideError`'s handling (wherever it's caught) populates `error_detail` naming which field(s) mismatched
-- [ ] 14.3.5 Verify tests fail: `pytest tests/workers/ tests/rpa/aeat/test_justificante.py -k "error_code or error_detail" -v`
-- [ ] 14.3.6 Implement: map each RPA exception type to its documented snake_case `error_code` and a constructed `error_detail` string in `ejecutar_presentacion`'s except block (replacing the current single generic `except Exception: ... error_code=type(exc).__name__` with per-type handling or a shared `.error_code`/`.error_detail` protocol on the exception classes themselves — implementer's choice, either satisfies the acceptance criterion)
-- [ ] 14.3.7 Run tests — must pass; run full worker suite with coverage to confirm no regression: `pytest tests/workers/ -v --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
+- [x] 14.3.1 Write failing test `test_ejecutar_presentacion_discrepancia_resultado_escribe_error_code_y_detail`: when `rellenar_pagina_devengado`/`_deducible` raises `DiscrepanciaResultadoError`, the `presentacion` row is updated with `error_code='discrepancia_resultado'` (not the Python class name) and `error_detail` containing the casilla number and both values
+- [x] 14.3.2 Write failing test `test_ejecutar_presentacion_nrc_invalido_escribe_error_code_y_detail`: `NRCInvalidoError` → `error_code='nrc_invalido'`, `error_detail` naming the NRC and the reason
+- [x] 14.3.3 Write failing test `test_ejecutar_presentacion_error_generico_aeat_escribe_error_code_y_detail`: any other/unexpected exception → a documented fallback `error_code` (e.g. `'fallo_presentacion'`, not a raw Python class name) with `error_detail` set to the exception's message
+- [x] 14.3.4 Write failing test `test_descargar_justificante_discrepancia_escribe_error_detail_con_campos`: `JustificanteNoCoincideError`'s handling (wherever it's caught) populates `error_detail` naming which field(s) mismatched
+- [x] 14.3.5 Verify tests fail: `pytest tests/workers/ tests/rpa/aeat/test_justificante.py -k "error_code or error_detail" -v`
+- [x] 14.3.6 Implement: map each RPA exception type to its documented snake_case `error_code` and a constructed `error_detail` string in `ejecutar_presentacion`'s except block (replacing the current single generic `except Exception: ... error_code=type(exc).__name__` with per-type handling or a shared `.error_code`/`.error_detail` protocol on the exception classes themselves — implementer's choice, either satisfies the acceptance criterion)
+- [x] 14.3.7 Run tests — must pass; run full worker suite with coverage to confirm no regression: `pytest tests/workers/ -v --cov=src.workers --cov-branch --cov-report=term-missing` (must remain 100%)
 
 ### 14.4 — MEDIUM-1: anchored matching in `verificar_justificante()`
 
 Acceptance: a justificante with a wrong `resultado` that shares trailing digits with the correct value (e.g. correct `"0.00"`, wrong PDF contains `"160.00"`) is detected as a mismatch, not silently accepted. Design ref: `design.md`'s new amendment under SPEC-F4-05.
 
-- [ ] 14.4.1 Write failing test `test_verificar_justificante_detecta_resultado_incorrecto_que_comparte_digitos`: expected `resultado="0.00"`, PDF text contains `"160.00"` (a real, different value that happens to contain `"0.00"` as a substring) — must raise `JustificanteNoCoincideError`
-- [ ] 14.4.2 Verify test fails against the current substring-containment implementation: `pytest tests/rpa/aeat/test_justificante.py -k "comparte_digitos" -v`
-- [ ] 14.4.3 Implement: replace `valor not in texto_pdf` with anchored/exact matching (e.g. extract the actual "Resultado de la liquidación: X" value via regex and compare the full number, or require non-alphanumeric boundaries around each expected value) for `resultado` at minimum; apply the same approach uniformly to `nif`/`modelo`/`ejercicio`/`periodo`/`csv` per the design amendment
-- [ ] 14.4.4 Run the full `test_justificante.py` suite — must pass, including the existing discrepancy/match tests (regression guard): `pytest tests/rpa/aeat/test_justificante.py -v --cov=src.rpa.aeat.justificante --cov-branch --cov-report=term-missing` (must remain 100%)
+- [x] 14.4.1 Write failing test `test_verificar_justificante_detecta_resultado_incorrecto_que_comparte_digitos`: expected `resultado="0.00"`, PDF text contains `"160.00"` (a real, different value that happens to contain `"0.00"` as a substring) — must raise `JustificanteNoCoincideError`
+- [x] 14.4.2 Verify test fails against the current substring-containment implementation: `pytest tests/rpa/aeat/test_justificante.py -k "comparte_digitos" -v`
+- [x] 14.4.3 Implement: replace `valor not in texto_pdf` with anchored/exact matching (e.g. extract the actual "Resultado de la liquidación: X" value via regex and compare the full number, or require non-alphanumeric boundaries around each expected value) for `resultado` at minimum; apply the same approach uniformly to `nif`/`modelo`/`ejercicio`/`periodo`/`csv` per the design amendment
+- [x] 14.4.4 Run the full `test_justificante.py` suite — must pass, including the existing discrepancy/match tests (regression guard): `pytest tests/rpa/aeat/test_justificante.py -v --cov=src.rpa.aeat.justificante --cov-branch --cov-report=term-missing` (must remain 100%)
 
 ### 14.5 — MEDIUM-2: ARQ retry/registration scoping (documentation-only, no code change)
 
@@ -238,8 +238,8 @@ Acceptance: `design.md`/`tasks.md`/`feature.md` accurately state that ARQ `Worke
 
 ### 14.6 — Full regression + second adversarial-review readiness
 
-- [ ] 14.6.1 Run full suite: `pytest tests/ -m "not integration" -v --cov=src/fiscal --cov=src/rpa --cov=src/workers --cov-branch --cov-report=term-missing` — confirm 100% on `src/fiscal/` (unchanged), 100% on every `src/rpa/`/`src/workers/` module (no partial branches introduced by the 14.1-14.4 fixes)
-- [ ] 14.6.2 Add an addendum to the Step 10 report (`specs/rpa-aeat/reports/`) documenting all 5 findings and their resolutions, plus final test count/coverage
+- [x] 14.6.1 Run full suite: `pytest tests/ -m "not integration" -v --cov=src/fiscal --cov=src/rpa --cov=src/workers --cov-branch --cov-report=term-missing` — confirm 100% on `src/fiscal/` (unchanged), 100% on every `src/rpa/`/`src/workers/` module (no partial branches introduced by the 14.1-14.4 fixes)
+- [x] 14.6.2 Add an addendum to the Step 10 report (`specs/rpa-aeat/reports/`) documenting all 5 findings and their resolutions, plus final test count/coverage
 - [ ] 14.6.3 Re-run `/adversarial-review` before archiving — exit criterion is a clean pass (PASS or PASS WITH GAPS, no CRITICAL/HIGH blockers)
 
 ## Exit criteria (Orchestrator evaluates before accepting this change)
