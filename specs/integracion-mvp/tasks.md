@@ -10,23 +10,31 @@
 
 ## 0. Setup: Create Feature Branch (MANDATORY — FIRST STEP)
 
-- [ ] 0.1 Create feature branch `feature/integracion-mvp` from `main`
-- [ ] 0.2 Verify branch creation: `git branch --show-current`
+- [x] 0.1 Create feature branch `feature/integracion-mvp` from `main`
+- [x] 0.2 Verify branch creation: `git branch --show-current`
 
 ## 1. Backend: `graph_runtime.py` — thin LangGraph HTTP wrapper (SPEC-F5-01 prerequisite)
 
 Acceptance criteria: prerequisite for all endpoint tasks below — no endpoint calls `graph.invoke()`/`Command`/`update_state` directly, all go through this module so the graph-lifecycle logic is unit-testable independent of FastAPI.
 
-- [ ] 1.1 Write failing test `test_iniciar_graph_invoca_hasta_primer_interrupt`: `iniciar_graph(user_id, user_jwt) -> dict` returns `thread_id`, `ejercicio`, `periodo`, `fecha_limite`, and an empty/near-empty `mensajes` list when no duplicate exists
+### 1.0 — Prerequisite (found during implementation): `/iniciar` cannot invoke `recopilar_datos` with empty `mensajes`
+
+Per `design.md`'s amendment: the graph has no native pause point between `verificar_duplicado` and `recopilar_datos`'s first LLM call, and that call requires a non-empty `mensajes` list (the Anthropic API rejects an empty array). `iniciar_graph` must seed the checkpoint via `detectar_periodo`/`verificar_duplicado` called as plain functions + `graph.update_state(..., as_node="verificar_duplicado")`, never a graph `invoke()` that would reach `recopilar_datos` with nothing to process.
+
+- [x] 1.0.1 Design amendment written (this session) — see `design.md`'s "Amendment (found during implementation, Task 1)"
+
+- [ ] 1.1 Write failing test `test_iniciar_graph_siembra_checkpoint_sin_invocar_recopilar_datos` (mocked checkpointer/graph): `iniciar_graph(user_id, user_jwt) -> dict` returns `thread_id`, `ejercicio`, `periodo`, `fecha_limite`; asserts `graph.update_state` was called with `as_node="verificar_duplicado"` and that no Anthropic client call occurred (proving `recopilar_datos` never ran)
 - [ ] 1.2 Write failing test `test_iniciar_graph_detecta_presentacion_duplicada`: given an existing `presentacion` row in `estado='presentado'` for the detected period, `iniciar_graph` raises `PresentacionDuplicadaError` (mapped to `409` at the router layer)
-- [ ] 1.3 Write failing test `test_enviar_mensaje_resume_con_texto_libre`: `enviar_mensaje(thread_id, {"tipo": "texto", "contenido": "..."})` calls `graph.invoke(Command(resume={"mensaje": ...}), config)` and returns the new agent message(s) plus `pendiente` (`none`/`revision_ocr`/`confirmacion`)
-- [ ] 1.4 Write failing test `test_enviar_mensaje_factura_confirmada_actualiza_estado`: a `{"tipo": "factura_confirmada", "factura": {...}}` payload results in `graph.update_state` being called with the reviewed invoice appended to `facturas_emitidas`/`facturas_recibidas`, not a chat turn
-- [ ] 1.5 Write failing test `test_calcular_graph_idempotente_si_ya_calculado`: if the checkpointed state already has `resultado_m303`, `calcular_graph(thread_id, facturas=None)` returns it without re-invoking `calcular`/`resumir`
-- [ ] 1.6 Write failing test `test_calcular_graph_estructurado_fusiona_facturas_y_avanza`: given `facturas_emitidas`/`facturas_recibidas` arrays and no prior `resultado_m303`, `calcular_graph` merges them via `update_state` then invokes forward through `calcular`→`resumir`, landing at the `confirmar` interrupt
-- [ ] 1.7 Write failing test `test_confirmar_graph_resume_interrupt_y_devuelve_confirmado`: `confirmar_graph(thread_id, metodo_pago, iban)` resumes the `confirmar` interrupt and returns `confirmado=True`
-- [ ] 1.8 Verify tests fail: `pytest tests/api/test_graph_runtime.py -v`
-- [ ] 1.9 Implement `src/api/graph_runtime.py` (`iniciar_graph`, `enviar_mensaje`, `calcular_graph`, `confirmar_graph`, `PresentacionDuplicadaError`) per `design.md` SPEC-F5-01, using `src.agent.checkpointer`/`src.agent.graph.construir_grafo` (Phase 3, unchanged)
-- [ ] 1.10 Run tests — must pass: `pytest tests/api/test_graph_runtime.py -v --cov=src.api.graph_runtime --cov-branch --cov-report=term-missing` (target 100%, `ANTHROPIC_API_KEY` required for the LLM-touching tests — mark those `@pytest.mark.integration` if a mocked Claude response isn't feasible, per Correction 2's convention)
+- [ ] 1.3 Write failing test `test_enviar_mensaje_primer_turno_avanza_hasta_confirmar` (mocked graph/Anthropic client returning a tool-call + text response): the first `/mensaje` call on a freshly-seeded thread invokes the graph with the user's message appended, and can return a `pendiente="confirmacion"` result in that single call — proving the endpoint doesn't assume a separate "done adding invoices" turn exists
+- [ ] 1.4 Write failing test `test_enviar_mensaje_resume_con_texto_libre_cuando_pausado`: when the thread IS currently paused at an interrupt (e.g. `confirmacion_baja_confianza`), a `{"tipo": "texto", ...}` message resumes via `Command(resume=...)` rather than a fresh `invoke(None, ...)`
+- [ ] 1.5 Write failing test `test_enviar_mensaje_factura_confirmada_actualiza_estado`: a `{"tipo": "factura_confirmada", "factura": {...}}` payload results in `graph.update_state` being called with the reviewed invoice appended to `facturas_emitidas`/`facturas_recibidas`, not a chat turn
+- [ ] 1.6 Write failing test `test_calcular_graph_idempotente_si_ya_calculado`: if the checkpointed state already has `resultado_m303`, `calcular_graph(thread_id, facturas=None)` returns it without re-invoking `calcular`/`resumir`
+- [ ] 1.7 Write failing test `test_calcular_graph_estructurado_fusiona_facturas_y_agrega_mensaje_sintetico`: given `facturas_emitidas`/`facturas_recibidas` arrays and no prior `resultado_m303`, `calcular_graph` merges them via `update_state`, appends the synthetic wrap-up user message, then invokes forward through `recopilar_datos`→`calcular`→`resumir`, landing at the `confirmar` interrupt
+- [ ] 1.8 Write failing test `test_confirmar_graph_resume_interrupt_y_devuelve_confirmado`: `confirmar_graph(thread_id, metodo_pago, iban)` resumes the `confirmar` interrupt and returns `confirmado=True`
+- [ ] 1.9 Verify tests fail: `pytest tests/api/test_graph_runtime.py -v -m "not integration"`
+- [ ] 1.10 Implement `src/api/graph_runtime.py` (`iniciar_graph`, `enviar_mensaje`, `calcular_graph`, `confirmar_graph`, `PresentacionDuplicadaError`) per `design.md` SPEC-F5-01 and its amendment, using `src.agent.checkpointer`/`src.agent.graph.construir_grafo` (Phase 3, unchanged — this module wraps it, never modifies it)
+- [ ] 1.11 Run unit tests (mocked graph/checkpointer) — must pass: `pytest tests/api/test_graph_runtime.py -v -m "not integration" --cov=src.api.graph_runtime --cov-branch --cov-report=term-missing`
+- [ ] 1.12 Write and run `@pytest.mark.integration` test(s) against the REAL graph + real Postgres checkpointer + real Claude Sonnet 5 (mirroring Phase 3's own `test_flujo_completo_perfil_1_token_budget` pattern) proving `iniciar_graph` → `enviar_mensaje` → `calcular_graph`/`confirmar_graph` actually work end-to-end against the live graph, not just mocks — per this task's CRITICAL instruction, these are the ONLY tests in this module allowed to touch a real Anthropic client, and they must be marked so `pytest -m "not integration"` (the default TDD cycle) never runs them
 
 ## 2. Backend: API Endpoints (SPEC-F5-01)
 
