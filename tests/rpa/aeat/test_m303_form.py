@@ -161,6 +161,19 @@ def test_rellenar_pagina_deducible_detecta_discrepancia_casilla_45():
         rellenar_pagina_deducible(page, mapa, SELECTORES)
 
 
+def test_rellenar_pagina_deducible_tolera_diferencia_redondeo():
+    page = _mock_page()
+
+    def locator_factory(selector):
+        if selector == SELECTORES["pagina_3_deducible"]["casilla_45_aeat_calculada"]:
+            return _mock_locator("21.01")  # within +/-0.02 tolerance
+        return _mock_locator()
+
+    page.locator.side_effect = locator_factory
+    mapa = {"28": Decimal("100.00"), "29": Decimal("21.00"), "45": Decimal("21.00")}
+    rellenar_pagina_deducible(page, mapa, SELECTORES)  # must not raise
+
+
 def test_rellenar_pagina_resultado_domiciliacion_escribe_iban():
     page = _mock_page()
     mapa = {"69": Decimal("160.00"), "71": Decimal("160.00")}
@@ -209,12 +222,39 @@ def test_rellenar_pagina_resultado_a_devolver_marca_radio_y_escribe_iban():
     page.locator.assert_any_call(SELECTORES["pagina_4_resultado"]["iban_devolucion_input"])
 
 
+def test_rellenar_pagina_resultado_a_devolver_sin_iban_no_escribe_iban():
+    page = _mock_page()
+    mapa = {"69": Decimal("-160.00"), "72": Decimal("160.00")}
+    resultado = rellenar_pagina_resultado(page, mapa, tipo_resultado="a_devolver", metodo_pago=None,
+                                           nrc=None, iban=None, selectores=SELECTORES)
+    page.locator.assert_any_call(SELECTORES["pagina_4_resultado"]["a_devolver_radio"])
+    assert SELECTORES["pagina_4_resultado"]["iban_devolucion_input"] not in [
+        c.args[0] for c in page.locator.call_args_list
+    ]
+    assert resultado["requiere_accion_manual"] is False
+
+
 def test_rellenar_pagina_resultado_sin_actividad_marca_checkbox():
     page = _mock_page()
     mapa = {"69": Decimal("0.00")}
     rellenar_pagina_resultado(page, mapa, tipo_resultado="sin_actividad", metodo_pago=None,
                                nrc=None, iban=None, selectores=SELECTORES)
     page.locator.assert_any_call(SELECTORES["pagina_4_resultado"]["sin_actividad_checkbox"])
+
+
+def test_rellenar_pagina_resultado_tipo_desconocido_no_realiza_ninguna_accion():
+    page = _mock_page()
+    mapa = {"69": Decimal("0.00")}
+    resultado = rellenar_pagina_resultado(page, mapa, tipo_resultado="negativa", metodo_pago=None,
+                                           nrc=None, iban=None, selectores=SELECTORES)
+    assert resultado == {"requiere_accion_manual": False}
+    for radio_o_checkbox in (
+        "a_compensar_radio", "a_devolver_radio", "sin_actividad_checkbox",
+        "iban_domiciliacion_input", "nrc_input",
+    ):
+        assert SELECTORES["pagina_4_resultado"][radio_o_checkbox] not in [
+            c.args[0] for c in page.locator.call_args_list
+        ]
 
 
 def test_rellenar_bloque_informativo_solo_valores_positivos():
