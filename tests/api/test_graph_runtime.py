@@ -199,13 +199,15 @@ def test_enviar_mensaje_omite_tasks_sin_interrupts(mock_construir_grafo, mock_cr
 @patch("src.api.graph_runtime.construir_grafo")
 def test_calcular_graph_idempotente_si_ya_calculado(mock_construir_grafo, mock_crear_checkpointer):
     grafo = _mock_grafo()
-    grafo.get_state.return_value = MagicMock(values={"resultado_m303": {"resultado": "160.00"}}, tasks=[])
+    grafo.get_state.return_value = MagicMock(
+        values={"resultado_m303": {"resultado": "160.00"}, "fecha_limite_presentacion": "2026-04-20"}, tasks=[]
+    )
     mock_construir_grafo.return_value = grafo
     mock_crear_checkpointer.return_value.__enter__.return_value = MagicMock()
 
     resultado = calcular_graph(thread_id="u1:P04:2026:1T", facturas_emitidas=None, facturas_recibidas=None)
 
-    assert resultado == {"resultado": "160.00"}
+    assert resultado == {"resultado": "160.00", "fecha_limite": "2026-04-20"}
     grafo.invoke.assert_not_called()
     grafo.update_state.assert_not_called()
 
@@ -217,6 +219,7 @@ def test_calcular_graph_estructurado_fusiona_facturas_y_agrega_mensaje_sintetico
     grafo.get_state.return_value = MagicMock(values={"resultado_m303": None, "mensajes": []}, tasks=[])
     grafo.invoke.return_value = {
         "resultado_m303": {"resultado": "160.00"},
+        "fecha_limite_presentacion": "2026-04-20",
         "__interrupt__": [MagicMock(value={"tipo": "confirmacion_p04"})],
     }
     mock_construir_grafo.return_value = grafo
@@ -226,7 +229,7 @@ def test_calcular_graph_estructurado_fusiona_facturas_y_agrega_mensaje_sintetico
 
     resultado = calcular_graph(thread_id="u1:P04:2026:1T", facturas_emitidas=facturas_emitidas, facturas_recibidas=[])
 
-    assert resultado == {"resultado": "160.00"}
+    assert resultado == {"resultado": "160.00", "fecha_limite": "2026-04-20"}
     grafo.update_state.assert_called_once()
     grafo.invoke.assert_called_once()
     invoke_args, _ = grafo.invoke.call_args

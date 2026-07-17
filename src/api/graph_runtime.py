@@ -140,7 +140,7 @@ def calcular_graph(thread_id: str, facturas_emitidas: list[dict] | None, factura
         estado_actual = grafo.get_state(config).values
 
         if estado_actual.get("resultado_m303") is not None:
-            return estado_actual["resultado_m303"]
+            return {**estado_actual["resultado_m303"], "fecha_limite": estado_actual["fecha_limite_presentacion"]}
 
         mensajes = list(estado_actual.get("mensajes", [])) + [
             {"rol": "usuario", "contenido": "He terminado de introducir mis facturas, calcula mi IVA."}
@@ -152,7 +152,7 @@ def calcular_graph(thread_id: str, facturas_emitidas: list[dict] | None, factura
             "mensajes": mensajes,
         })
         resultado = grafo.invoke(None, config)
-        return resultado["resultado_m303"]
+        return {**resultado["resultado_m303"], "fecha_limite": resultado["fecha_limite_presentacion"]}
 
 
 def confirmar_graph(thread_id: str, metodo_pago: str | None, iban: str | None) -> dict:
