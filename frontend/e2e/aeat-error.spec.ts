@@ -71,7 +71,11 @@ test("AEAT error: non-retryable failure shows a readable message and persists", 
   await expect(page.getByText(mensajeError)).toBeVisible();
 
   // Process state persists across a reload -- /estado is the source of truth.
+  // Timeout is 20s (not the usual 10s): the reload path awaits two sequential
+  // network calls (/iniciar then /estado) before RpaStatus can render, which
+  // is tight under concurrent full-suite load against a single shared uvicorn
+  // process making real Anthropic API calls.
   await page.reload();
-  await expect(page.getByText("No se pudo presentar tu declaración")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("No se pudo presentar tu declaración")).toBeVisible({ timeout: 20000 });
   await expect(page.getByText(mensajeError)).toBeVisible();
 });

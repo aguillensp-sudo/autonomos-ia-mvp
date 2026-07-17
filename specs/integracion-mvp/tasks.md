@@ -34,7 +34,7 @@ Per `design.md`'s amendment: the graph has no native pause point between `verifi
 - [x] 1.9 Verify tests fail: `pytest tests/api/test_graph_runtime.py -v -m "not integration"`
 - [x] 1.10 Implement `src/api/graph_runtime.py` (`iniciar_graph`, `enviar_mensaje`, `calcular_graph`, `confirmar_graph`, `PresentacionDuplicadaError`) per `design.md` SPEC-F5-01 and its amendment, using `src.agent.checkpointer`/`src.agent.graph.construir_grafo` (Phase 3, unchanged — this module wraps it, never modifies it)
 - [x] 1.11 Run unit tests (mocked graph/checkpointer) — must pass: `pytest tests/api/test_graph_runtime.py -v -m "not integration" --cov=src.api.graph_runtime --cov-branch --cov-report=term-missing`
-- [ ] 1.12 Write and run `@pytest.mark.integration` test(s) against the REAL graph + real Postgres checkpointer + real Claude Sonnet 5 (mirroring Phase 3's own `test_flujo_completo_perfil_1_token_budget` pattern) proving `iniciar_graph` → `enviar_mensaje` → `calcular_graph`/`confirmar_graph` actually work end-to-end against the live graph, not just mocks — per this task's CRITICAL instruction, these are the ONLY tests in this module allowed to touch a real Anthropic client, and they must be marked so `pytest -m "not integration"` (the default TDD cycle) never runs them
+- [x] 1.12 Write and run `@pytest.mark.integration` test(s) against the REAL graph + real Postgres checkpointer + real Claude Sonnet 5 (mirroring Phase 3's own `test_flujo_completo_perfil_1_token_budget` pattern) proving `iniciar_graph` → `enviar_mensaje` → `calcular_graph`/`confirmar_graph` actually work end-to-end against the live graph, not just mocks — per this task's CRITICAL instruction, these are the ONLY tests in this module allowed to touch a real Anthropic client, and they must be marked so `pytest -m "not integration"` (the default TDD cycle) never runs them
 
 ## 2. Backend: API Endpoints (SPEC-F5-01)
 
@@ -90,10 +90,10 @@ Acceptance criteria: CA-F5-07
 
 Acceptance criteria: prerequisite — no CA directly
 
-- [ ] 5.1 Scaffold `frontend/` (Next.js 15, App Router, TypeScript strict, Tailwind, shadcn/ui) per `docs/frontend-standards.md`'s folder structure
-- [ ] 5.2 Implement `lib/supabase/client.ts`, `lib/supabase/server.ts` (per `@supabase/auth-helpers-nextjs`), `lib/types/p04.ts` (typed to match the Pydantic models exactly — `docs/frontend-standards.md`'s TypeScript conventions)
-- [ ] 5.3 Implement `lib/api/p04.ts` — typed fetch wrappers for all 7 endpoints (Phase 1's existing `/facturas` CRUD + this phase's 6)
-- [ ] 5.4 `(auth)/login`, `(auth)/register`, `dashboard/page.tsx` — minimal, Supabase Auth only, no custom UI beyond shadcn defaults (out of scope: any dashboard beyond the entry point, per the PDR's V2 deferral)
+- [x] 5.1 Scaffold `frontend/` (Next.js 15, App Router, TypeScript strict, Tailwind, shadcn/ui) per `docs/frontend-standards.md`'s folder structure
+- [x] 5.2 Implement `lib/supabase/client.ts`, `lib/supabase/server.ts` (per `@supabase/auth-helpers-nextjs`), `lib/types/p04.ts` (typed to match the Pydantic models exactly — `docs/frontend-standards.md`'s TypeScript conventions)
+- [x] 5.3 Implement `lib/api/p04.ts` — typed fetch wrappers for all 7 endpoints (Phase 1's existing `/facturas` CRUD + this phase's 6)
+- [x] 5.4 `(auth)/login`, `(auth)/register`, `dashboard/page.tsx` — minimal, Supabase Auth only, no custom UI beyond shadcn defaults (out of scope: any dashboard beyond the entry point, per the PDR's V2 deferral)
 
 ## 6. Frontend: P04 Flow Components (SPEC-F5-05)
 
