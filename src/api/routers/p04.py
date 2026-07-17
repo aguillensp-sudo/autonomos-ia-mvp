@@ -24,6 +24,24 @@ QR_BUCKET = "qr-clave"
 JUSTIFICANTE_BUCKET = "justificantes"
 
 
+def _presentacion_por_proceso_id(client, proceso_id: str):
+    """proceso_id is the LangGraph thread_id ("{user_id}:P04:{ejercicio}:{periodo}",
+    per construir_thread_id) — not presentacion.id (a separate server-generated
+    UUID). Looks up by the same (user_id, proceso, ejercicio, periodo) key
+    notificar.py's own upsert uses (on_conflict="user_id,proceso,ejercicio,periodo")."""
+    user_id, proceso, ejercicio, periodo = proceso_id.split(":")
+    return (
+        client.table("presentacion")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("proceso", proceso)
+        .eq("ejercicio", int(ejercicio))
+        .eq("periodo", periodo)
+        .execute()
+        .data
+    )
+
+
 class FacturaEmitidaCreate(BaseModel):
     tipo: Literal["emitida"]
     numero_factura: str
@@ -150,7 +168,7 @@ async def confirmar(payload: dict, req: AuthedRequest = Depends(get_authed_reque
 
 @router.get("/estado/{proceso_id}")
 def estado(proceso_id: str, req: AuthedRequest = Depends(get_authed_request)):
-    fila = req.client.table("presentacion").select("*").eq("id", proceso_id).execute().data
+    fila = _presentacion_por_proceso_id(req.client, proceso_id)
     if not fila:
         raise HTTPException(status_code=404, detail=_error("NOT_FOUND", "Proceso no encontrado"))
     fila = fila[0]
@@ -169,7 +187,7 @@ def estado(proceso_id: str, req: AuthedRequest = Depends(get_authed_request)):
 
 @router.get("/justificante/{proceso_id}")
 def justificante(proceso_id: str, req: AuthedRequest = Depends(get_authed_request)):
-    fila = req.client.table("presentacion").select("*").eq("id", proceso_id).execute().data
+    fila = _presentacion_por_proceso_id(req.client, proceso_id)
     if not fila or fila[0]["estado"] != "presentado":
         raise HTTPException(status_code=404, detail=_error("NOT_FOUND", "Justificante no disponible"))
     fila = fila[0]

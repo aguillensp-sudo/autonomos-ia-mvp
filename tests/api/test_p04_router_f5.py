@@ -149,14 +149,14 @@ def test_post_confirmar_no_enqueues_si_grafo_no_confirma(mock_graph_runtime, moc
 
 def test_get_estado_lee_presentacion_directo_de_bd():
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{
         "id": "p1", "estado": "presentando", "ejercicio": 2026, "periodo": "1T",
         "resultado": None, "csv_aeat": None, "nrc": None, "error_code": None, "error_detail": None,
     }]
     mock_client.storage.from_.return_value.create_signed_url.return_value = {"signedURL": "https://signed/qr.png"}
     app.dependency_overrides[get_authed_request] = lambda: AuthedRequest(client=mock_client, user_id="u1", jwt="fake-jwt")
 
-    resp = client.get("/api/proceso/p04/estado/p1")
+    resp = client.get("/api/proceso/p04/estado/u1:P04:2026:1T")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -166,14 +166,14 @@ def test_get_estado_lee_presentacion_directo_de_bd():
 
 def test_get_estado_qr_url_null_si_archivo_no_existe():
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{
         "id": "p1", "estado": "presentando", "ejercicio": 2026, "periodo": "1T",
         "resultado": None, "csv_aeat": None, "nrc": None, "error_code": None, "error_detail": None,
     }]
     mock_client.storage.from_.return_value.create_signed_url.side_effect = Exception("not found")
     app.dependency_overrides[get_authed_request] = lambda: AuthedRequest(client=mock_client, user_id="u1", jwt="fake-jwt")
 
-    resp = client.get("/api/proceso/p04/estado/p1")
+    resp = client.get("/api/proceso/p04/estado/u1:P04:2026:1T")
 
     assert resp.status_code == 200
     assert resp.json()["qr_url"] is None
@@ -181,13 +181,13 @@ def test_get_estado_qr_url_null_si_archivo_no_existe():
 
 def test_get_estado_sin_qr_si_no_esta_presentando():
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{
         "id": "p1", "estado": "presentado", "ejercicio": 2026, "periodo": "1T",
         "resultado": None, "csv_aeat": "ABCD1234EFGH5678", "nrc": None, "error_code": None, "error_detail": None,
     }]
     app.dependency_overrides[get_authed_request] = lambda: AuthedRequest(client=mock_client, user_id="u1", jwt="fake-jwt")
 
-    resp = client.get("/api/proceso/p04/estado/p1")
+    resp = client.get("/api/proceso/p04/estado/u1:P04:2026:1T")
 
     assert resp.status_code == 200
     assert resp.json()["qr_url"] is None
@@ -196,24 +196,24 @@ def test_get_estado_sin_qr_si_no_esta_presentando():
 
 def test_get_estado_404_si_no_existe():
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
     app.dependency_overrides[get_authed_request] = lambda: AuthedRequest(client=mock_client, user_id="u1", jwt="fake-jwt")
 
-    resp = client.get("/api/proceso/p04/estado/p1")
+    resp = client.get("/api/proceso/p04/estado/u1:P04:2026:1T")
 
     assert resp.status_code == 404
 
 
 def test_get_justificante_devuelve_url_firmada():
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{
         "estado": "presentado", "justificante_path": "justificantes/u1/2026_1T.pdf",
         "csv_aeat": "ABCD1234EFGH5678", "nrc": None,
     }]
     mock_client.storage.from_.return_value.create_signed_url.return_value = {"signedURL": "https://signed/j.pdf"}
     app.dependency_overrides[get_authed_request] = lambda: AuthedRequest(client=mock_client, user_id="u1", jwt="fake-jwt")
 
-    resp = client.get("/api/proceso/p04/justificante/p1")
+    resp = client.get("/api/proceso/p04/justificante/u1:P04:2026:1T")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -223,11 +223,11 @@ def test_get_justificante_devuelve_url_firmada():
 
 def test_get_justificante_404_si_no_presentado():
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{
         "estado": "presentando", "justificante_path": None, "csv_aeat": None, "nrc": None,
     }]
     app.dependency_overrides[get_authed_request] = lambda: AuthedRequest(client=mock_client, user_id="u1", jwt="fake-jwt")
 
-    resp = client.get("/api/proceso/p04/justificante/p1")
+    resp = client.get("/api/proceso/p04/justificante/u1:P04:2026:1T")
 
     assert resp.status_code == 404
