@@ -187,9 +187,18 @@ def recopilar_datos(estado: dict) -> dict:
 
     client = crear_cliente_anthropic()
 
+    # D11 rolling window (SPEC-F5-06): a per-call view only — keeps the
+    # first message (often the sin_actividad/duplicate-disclosure context)
+    # plus the most recent 14 when the history grows past 15 turns. Never
+    # mutates estado["mensajes"], which keeps the full history for display
+    # and for the next call's own trim.
+    historial = estado.get("mensajes", [])
+    if len(historial) > 15:
+        historial = [historial[0]] + historial[-14:]
+
     mensajes_api = [
         {"role": "user" if m["rol"] == "usuario" else "assistant", "content": m["contenido"]}
-        for m in estado.get("mensajes", [])
+        for m in historial
     ]
 
     respuesta = client.messages.create(

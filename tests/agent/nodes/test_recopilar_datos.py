@@ -1,6 +1,8 @@
 """Tests for recopilar_datos node. Acceptance criteria: CA-F3-04, CA-F3-08.
 Makes real calls to the Claude Sonnet 5 API (ANTHROPIC_API_KEY required).
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
 from dotenv import load_dotenv
 
@@ -256,3 +258,65 @@ def test_resolver_confirmaciones_path_inexistente_no_ensambla_vacio():
     assert emitidas == []
     assert recibidas == []
     assert baja_confianza == []
+
+
+def _estado_con_n_mensajes(n: int) -> dict:
+    mensajes = [{"rol": "usuario", "contenido": f"mensaje {i}"} for i in range(n)]
+    return {
+        "user_id": "user-1",
+        "mensajes": mensajes,
+        "facturas_emitidas": [],
+        "facturas_recibidas": [],
+        "facturas_pendientes_ocr": [],
+        "facturas_baja_confianza": [],
+        "sin_actividad": None,
+        "tokens_usados": 0,
+    }
+
+
+def _mock_respuesta_llm(texto: str = "Entendido."):
+    bloque_texto = MagicMock(type="text", text=texto)
+    respuesta = MagicMock(content=[bloque_texto])
+    respuesta.usage.input_tokens = 10
+    respuesta.usage.output_tokens = 5
+    return respuesta
+
+
+@patch("src.agent.nodes.recopilar_datos.crear_cliente_anthropic")
+def test_recopilar_datos_recorta_historial_si_supera_15_turnos(mock_crear_cliente):
+    """SPEC-F5-06 (D11 rolling window). The trim is a PER-CALL VIEW ONLY —
+    estado["mensajes"] must keep the full history (never mutated), while
+    only the list sent to the LLM in this call is trimmed to the first
+    message plus the most recent 14 (15 total)."""
+    estado = _estado_con_n_mensajes(20)
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_respuesta_llm()
+    mock_crear_cliente.return_value = mock_client
+
+    resultado = recopilar_datos(estado)
+
+    _, kwargs = mock_client.messages.create.call_args
+    mensajes_enviados = kwargs["messages"]
+    assert len(mensajes_enviados) == 15
+    assert mensajes_enviados[0]["content"] == "mensaje 0"
+    assert mensajes_enviados[1]["content"] == "mensaje 6"
+    assert mensajes_enviados[-1]["content"] == "mensaje 19"
+
+    assert len(estado["mensajes"]) == 20
+    assert len(resultado["mensajes"]) == 21
+
+
+@patch("src.agent.nodes.recopilar_datos.crear_cliente_anthropic")
+def test_recopilar_datos_no_recorta_bajo_15_turnos(mock_crear_cliente):
+    """Regression guard: unchanged behavior below the D11 threshold."""
+    estado = _estado_con_n_mensajes(10)
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_respuesta_llm()
+    mock_crear_cliente.return_value = mock_client
+
+    recopilar_datos(estado)
+
+    _, kwargs = mock_client.messages.create.call_args
+    mensajes_enviados = kwargs["messages"]
+    assert len(mensajes_enviados) == 10
+    assert len(estado["mensajes"]) == 10
