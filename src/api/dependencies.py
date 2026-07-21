@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 
 from fastapi import Header, HTTPException
+from storage3 import SyncStorageClient
 from supabase import Client, create_client
 
 
@@ -14,6 +15,9 @@ from supabase import Client, create_client
 class AuthedRequest:
     client: Client
     user_id: str
+    jwt: str  # raw JWT — needed by graph_runtime.py to build EstadoP04.user_jwt
+              # (Phase 5, SPEC-F5-01) since agent nodes construct their own
+              # RLS-scoped client from this string, not from `client` above.
 
 
 def _decode_jwt_sub(jwt: str) -> str:
@@ -53,5 +57,13 @@ def get_authed_request(authorization: str | None = Header(default=None)) -> Auth
 
     client = create_client(url, anon_key)
     client.postgrest.auth(jwt)
+    # supabase-py's Client.storage snapshots headers from the anon key alone
+    # at first access; mutating it afterward has no effect on real requests
+    # (storage3 keeps its own header snapshot). Must rebuild it with the JWT,
+    # same fix as src/agent/supabase_client.py::crear_cliente_usuario.
+    client._storage = SyncStorageClient(
+        url=str(client.storage_url),
+        headers={**client.options.headers, "Authorization": f"Bearer {jwt}"},
+    )
     user_id = _decode_jwt_sub(jwt)
-    return AuthedRequest(client=client, user_id=user_id)
+    return AuthedRequest(client=client, user_id=user_id, jwt=jwt)

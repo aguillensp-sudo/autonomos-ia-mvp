@@ -1,5 +1,7 @@
 # Development Guide
 
+**Deployment is not covered by this guide.** Everything below documents *local* development only. `SPEC-F5-05` (Dockerfile, docker-compose.yml, a documented rollback procedure) from the functional spec's own F5 section has not been built — CA-F5-09 ("`/health` responds correctly on the deployed server") is verified only against local `uvicorn`/`npm run dev`, never a real deployment. A deployment-focused follow-up change is needed before the MVP's "Definición de Hecho" bar can be met.
+
 ## Prerequisites
 
 - Python 3.14 (deviation from the original 3.12 spec — spec was written before the 3.14 release; 3.14 is fully compatible with the stack used here)
@@ -19,8 +21,9 @@ cd autonomos-ia-mvp
 
 ### 2. Backend environment
 
+The repo root itself is the backend -- there is no `backend/` subdirectory (only `frontend/` is nested).
+
 ```bash
-cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -29,12 +32,13 @@ cp .env.example .env
 
 Fill in `.env`:
 ```
+SUPABASE_URL=http://127.0.0.1:54321          # local Supabase; the remote project URL in production
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_KEY=eyJ...               # For migrations and test fixtures only -- never in application code
+SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres   # LangGraph's PostgresSaver checkpointer connects directly, not through PostgREST
 ANTHROPIC_API_KEY=sk-ant-...      # Opus 4.8 + Sonnet 5
 DEEPINFRA_API_KEY=...             # GLM-5.2
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_KEY=eyJ...       # For migrations only
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://localhost:6379  # ARQ job queue (Phase 4 onwards)
 LANGSMITH_API_KEY=ls__...
 LANGCHAIN_TRACING_V2=true        # Enables LangSmith tracing (Phase 3 onwards)
 LANGCHAIN_PROJECT=autonomos-ia-mvp
@@ -59,9 +63,11 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ### 4. Local services (Redis + Supabase local)
 
+There is no `docker-compose.yml` in this repo -- start Redis as a plain container:
+
 ```bash
 # Start Redis
-docker compose up redis -d
+docker run -d --name autonomos-redis -p 6379:6379 redis:7-alpine
 
 # Start Supabase local (first time takes a few minutes — pulls Docker images)
 supabase start
@@ -79,7 +85,6 @@ supabase migration up
 ### 5. Seed data
 
 ```bash
-cd backend
 python scripts/seed_data.py      # Creates 3 autónomo test profiles with invoices
 ```
 
@@ -87,13 +92,17 @@ python scripts/seed_data.py      # Creates 3 autónomo test profiles with invoic
 
 ### Start all services
 
+Startup order matters: Supabase and Redis must be up before the backend (checkpointing/Storage and job enqueueing both fail fast otherwise); the ARQ worker and `uvicorn` can start in either order relative to each other, but both need Supabase+Redis first; the frontend only needs `uvicorn` reachable at `NEXT_PUBLIC_API_URL`.
+
 ```bash
-# Terminal 1 — Backend API
-cd backend
+# 0. Supabase local + Redis (see step 4 above) — must be running first
+supabase start
+docker run -d --name autonomos-redis -p 6379:6379 redis:7-alpine
+
+# Terminal 1 — Backend API (repo root)
 uvicorn src.api.main:app --reload --port 8000
 
-# Terminal 2 — ARQ worker (RPA jobs)
-cd backend
+# Terminal 2 — ARQ worker (RPA jobs, repo root)
 python -m arq src.workers.rpa_worker.WorkerSettings
 
 # Terminal 3 — Frontend
@@ -109,7 +118,6 @@ API docs at: `http://localhost:8000/docs`
 ### Backend unit tests (fiscal engine)
 
 ```bash
-cd backend
 pytest tests/fiscal/ -v --cov=src/fiscal --cov-report=term-missing
 ```
 
@@ -121,6 +129,14 @@ Coverage must be 100% on `src/fiscal/` before any PR.
 # Requires local Supabase running
 pytest tests/integration/ -v
 ```
+
+### API tests (Phase 5 onwards)
+
+```bash
+pytest tests/api/ -m "not integration" -v --cov=src/api --cov-branch --cov-report=term-missing
+```
+
+`tests/api/test_graph_runtime_integration.py` makes a real Claude Sonnet 5 call end-to-end (iniciar → mensaje → confirmar) and is marked `@pytest.mark.integration` — excluded from the default cycle above; note it can be flaky (real LLM sampling variance on a single free-text turn can occasionally route differently), which is expected, not a regression.
 
 ### Conversational agent tests (Phase 3 onwards)
 
@@ -148,11 +164,20 @@ pytest tests/rpa/aeat/test_autenticacion.py -m integration -v
 
 ### Frontend E2E tests (Playwright)
 
+Requires the full local stack running (Supabase, Redis, `uvicorn`, the ARQ worker, and `npm run dev`) plus a service-role key for test-only setup/teardown (creating throwaway users, seeding `perfil_fiscal`, simulating `presentacion` row transitions). Create `frontend/.env.e2e.local` (gitignored, never commit it):
+
+```
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SERVICE_ROLE_KEY=eyJ...   # same value as the backend's SUPABASE_SERVICE_KEY
+```
+
 ```bash
 cd frontend
 npx playwright install chromium     # First time only
 npx playwright test
 ```
+
+**No real AEAT session is ever exercised by these specs.** Phase 4's stub AEAT fixtures (`tests/rpa/_stubs_aeat.py`) only mock Playwright's `Page` object inside pytest — there is no runtime "stub mode" the real ARQ worker can be pointed at. Every spec that reaches an RPA-outcome state (`presentando`/`presentado`/`sesion_expirada`/`failed`) intercepts the browser's own `POST /confirmar` call and simulates the `presentacion` row transitions a real `rpa_worker.py` run would have written, directly via the Supabase admin client — see `integracion-mvp/design.md`'s Task 10 amendment for the full rationale (archived under `specs/archive/` once this change ships).
 
 ## OpenSpec workflow
 
@@ -205,19 +230,23 @@ GLM-5.2 via DeepInfra (Frontend Agent)
 
 ## Project structure
 
+The repo root is the backend directly -- there is no `backend/` subdirectory (a stale assumption from early planning docs; corrected here to match the real layout).
+
 ```
 autonomos-ia-mvp/
-  backend/
-    src/
-      api/          # FastAPI routes and dependencies
-      agents/       # LangGraph graphs and agent nodes
-      fiscal/       # Deterministic tax calculation engine
-      rpa/          # Playwright automation for AEAT
-      workers/      # ARQ async workers
-      db/           # Supabase client and migrations
-    tests/
-      fiscal/       # Unit tests (100% coverage required)
-      integration/  # Integration tests against real Supabase
+  src/
+    api/            # FastAPI routes and dependencies
+    agent/          # LangGraph graph and agent nodes
+    fiscal/         # Deterministic tax calculation engine
+    rpa/            # Playwright automation for AEAT
+    workers/        # ARQ async workers
+    db/             # Migration files (mirrored into supabase/migrations/)
+  tests/
+    fiscal/         # Unit tests (100% coverage required)
+    agent/          # LangGraph/agent-node tests (100% line+branch required)
+    api/            # FastAPI endpoint tests
+    rpa/, workers/  # RPA/ARQ tests (Playwright fully mocked)
+    integration/    # Integration tests against real Supabase
   frontend/
     app/            # Next.js App Router pages
     components/     # React components
@@ -239,7 +268,8 @@ autonomos-ia-mvp/
 - **RPA selectors in config.** Never hardcode AEAT selectors in Python code. `src/rpa/selectors/aeat_m303.yml` is the only place they live.
 - **Human confirmation is non-negotiable.** The `/api/proceso/p04/confirmar` endpoint must only be called after the user has clicked the ConfirmacionModal. No auto-confirmation under any circumstances.
 - **Phase 3 stops at `confirmado=True`.** The `agente-conversacional` graph (`src/agent/graph.py`) ends at the `notificar` node once the user confirms via the `confirmar` `interrupt()` — it never files anything with the AEAT. `notificar` upserts a `presentacion` row in `estado='confirmado'` (SPEC-F4-00, added in Phase 4) so the RPA worker has something to pick up.
-- **Phase 4 (`rpa-aeat`) is the RPA module + ARQ worker only — not the enqueueing endpoint.** `src/workers/rpa_worker.py::procesar_presentacion` drives one `presentacion` row through `estado='confirmado' -> presentando -> presentado|error`, but nothing in Phase 4 enqueues that ARQ job. `/api/proceso/p04/confirmar` (Phase 5) is what will actually enqueue it once a chat UI exists — Phase 4 does not touch `src/api/`.
+- **Phase 4 (`rpa-aeat`) built the RPA module + ARQ worker only — Phase 5 (`integracion-mvp`) added the enqueueing endpoint.** `src/workers/rpa_worker.py::procesar_presentacion` drives one `presentacion` row through `estado='confirmado' -> presentando -> presentado|error`; `POST /api/proceso/p04/confirmar` is what actually enqueues that job (`await pool.enqueue_job("procesar_presentacion", ...)`), after resuming the `confirmar` interrupt.
+- **There is no runtime "stub AEAT" mode.** Phase 4's stub fixtures (`tests/rpa/_stubs_aeat.py`) only mock Playwright's `Page` object inside pytest. A real enqueued job runs real Playwright against the real AEAT Sede Electrónica and needs a real Cl@ve Móvil session — the same blocker as `test_autenticar_clave_movil_sesion_real` (see above). Never call `/confirmar` against a real user/period locally unless you intend to actually attempt a real AEAT filing.
 - **Deducible casilla-group mapping is data, not logic.** `src/rpa/casilla_map.py::TABLA_CASILLA_DEDUCIBLE` (Product-Owner-approved) maps each `categoria_gasto` to its AEAT casilla group (corriente/inversión/intracomunitario). Adding a new expense category updates this file, never `m303_form.py`.
 
 ## Troubleshooting
@@ -254,3 +284,9 @@ The Cl@ve Móvil session lasts 10 minutes from authentication. If the user took 
 
 **GLM-5.2 not responding via DeepInfra:**
 Check DEEPINFRA_API_KEY in `.env`. GLM-5.2 model ID is `Zhipu-AI/GLM-5.2`. Rate limits apply — check DeepInfra dashboard.
+
+**A Storage call (upload, signed URL) fails with "new row violates row-level security policy" despite a valid JWT:**
+supabase-py's `Client.storage` property snapshots headers from the anon key alone the first time it's accessed — calling `client.postgrest.auth(jwt)` does *not* propagate to Storage. Any code building its own per-request Supabase client must replicate `src/agent/supabase_client.py::crear_cliente_usuario`'s fix: replace `client._storage` with a freshly built `SyncStorageClient` carrying `Authorization: Bearer {jwt}` in its headers. `src/api/dependencies.py::get_authed_request` does this already (Phase 5 fix); any new code path building a Supabase client from scratch must do the same.
+
+**`uvicorn --reload` feels slow or picks up changes unpredictably:**
+By default `--reload` watches every file under the working directory. If you started `uvicorn` from the parent of this repo (a monorepo containing sibling projects), pass `--reload-dir src` explicitly so it only watches this project's own source.

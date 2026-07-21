@@ -3,6 +3,7 @@
 """
 import os
 
+import redis
 from fastapi import APIRouter
 from supabase import create_client
 
@@ -18,6 +19,10 @@ def health():
     except Exception:
         db_status = "error"
 
-    # Redis check is a Phase 5 concern (ARQ workers not wired yet this phase) —
-    # reported as "not_configured" rather than faking "ok".
-    return {"status": "ok", "db": db_status, "redis": "not_configured"}
+    redis_status = "ok"
+    try:
+        redis.from_url(os.environ["REDIS_URL"]).ping()
+    except Exception:
+        redis_status = "error"
+
+    return {"status": "ok", "db": db_status, "redis": redis_status}

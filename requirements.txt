@@ -16,3 +16,5 @@ PyYAML>=6.0  # SPEC-F4-01: external selector map (src/rpa/selectors/aeat_m303.ym
 playwright>=1.61  # SPEC-F4-02/04/05: AEAT RPA automation
 arq>=0.28  # SPEC-F4-worker: ARQ + Redis job queue
 pypdf>=6.14  # SPEC-F4-05: justificante PDF text-layer verification
+python-multipart>=0.0.32  # SPEC-F5-01: multipart/form-data for /facturas/ocr
+redis>=5.0  # SPEC-F5-09 correction: /health pings Redis directly (arq's own dependency, now a direct import too)
