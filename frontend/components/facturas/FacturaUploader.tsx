@@ -8,10 +8,11 @@ import type { OcrResult } from "@/lib/types/p04";
 
 export interface FacturaUploaderProps {
   tipo: "emitida" | "recibida";
+  userId: string;
   onFacturaConfirmada: (tipo: "emitida" | "recibida", datos: Record<string, unknown>) => void;
 }
 
-export function FacturaUploader({ tipo, onFacturaConfirmada }: FacturaUploaderProps): React.JSX.Element {
+export function FacturaUploader({ tipo, userId, onFacturaConfirmada }: FacturaUploaderProps): React.JSX.Element {
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<OcrResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function FacturaUploader({ tipo, onFacturaConfirmada }: FacturaUploaderPr
 
   if (resultado) {
     return (
-      <FacturaReviewer tipo={tipo} extracted={resultado.extracted} onConfirm={handleConfirmarReview} />
+      <FacturaReviewer tipo={tipo} extracted={resultado.extracted} userId={userId} onConfirm={handleConfirmarReview} />
     );
   }
 

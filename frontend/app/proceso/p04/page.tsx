@@ -11,6 +11,7 @@ import { RpaStatus } from "@/components/rpa/RpaStatus";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { iniciarProceso, calcular, confirmar, obtenerEstado } from "@/lib/api/p04";
+import { ibanSchema } from "@/lib/validation/iban";
 import type { MensajeChat, Pendiente, ResultadoM303 } from "@/lib/types/p04";
 
 type Fase = "cargando" | "chat" | "calculado" | "confirmado";
@@ -122,8 +123,8 @@ export default function ProcesoP04Page(): React.JSX.Element {
             initialPendiente={pendiente}
             onPendienteChange={handlePendienteChange}
           />
-          <FacturaUploader tipo="emitida" onFacturaConfirmada={handleFacturaConfirmada} />
-          <FacturaUploader tipo="recibida" onFacturaConfirmada={handleFacturaConfirmada} />
+          <FacturaUploader tipo="emitida" userId={userId} onFacturaConfirmada={handleFacturaConfirmada} />
+          <FacturaUploader tipo="recibida" userId={userId} onFacturaConfirmada={handleFacturaConfirmada} />
           <Button onClick={handleCalcular}>Calcular mi IVA</Button>
         </>
       )}
@@ -138,7 +139,7 @@ export default function ProcesoP04Page(): React.JSX.Element {
               onChange={(e) => setIban(e.target.value)}
               placeholder="ES00 0000 0000 0000 0000 0000"
             />
-            <Button disabled={iban.length < 4} onClick={() => setModalAbierto(true)}>
+            <Button disabled={!ibanSchema.safeParse(iban).success} onClick={() => setModalAbierto(true)}>
               Continuar a la presentación
             </Button>
           </div>

@@ -127,6 +127,41 @@ def test_calcular_node_sin_actividad_facturas_vacias(test_user_con_perfil):
     assert resultado["errores_coherencia"] == []
 
 
+def test_calcular_node_acepta_payload_con_forma_facturareviewer(test_user_con_perfil):
+    """CRITICAL fix (SPEC-F5-07): proves the exact crash site from adversarial
+    review Finding 1 is closed — a dict shaped exactly like FacturaReviewer.tsx's
+    post-fix onConfirm() output (all required fields present, cuota_iva
+    pre-computed, categoria_gasto/porcentaje_deducible present for recibida)
+    must construct FacturaEmitida/FacturaRecibida and calcular() without a
+    ValidationError."""
+    user_id = test_user_con_perfil["id"]
+    factura_emitida_reviewer_shape = {
+        "id": str(uuid4()), "user_id": user_id, "numero_factura": f"OCR-{uuid4().hex[:8]}",
+        "fecha": "2026-01-15", "nif_cliente": "12345678Z",
+        "base_imponible": "100.00", "tipo_iva": 21, "cuota_iva": "21.00",
+    }
+    factura_recibida_reviewer_shape = {
+        "id": str(uuid4()), "user_id": user_id, "fecha": "2026-01-16",
+        "nif_proveedor": "B87654321", "categoria_gasto": "software_saas",
+        "base_imponible": "50.00", "tipo_iva": 21, "cuota_iva": "10.50",
+        "porcentaje_deducible": "100",
+    }
+    estado = {
+        "user_id": user_id,
+        "user_jwt": test_user_con_perfil["jwt"],
+        "ejercicio": EJERCICIO_TEST,
+        "periodo": "3T",
+        "fecha_inicio_periodo": "2026-07-01",
+        "fecha_fin_periodo": "2026-09-30",
+        "facturas_emitidas": [factura_emitida_reviewer_shape],
+        "facturas_recibidas": [factura_recibida_reviewer_shape],
+    }
+
+    resultado = calcular(estado)  # must not raise pydantic.ValidationError
+
+    assert resultado["resultado_m303"]["tipo_resultado"] != "sin_actividad"
+
+
 def test_calcular_node_sin_perfil_fiscal_lanza_error(test_user_con_perfil):
     import pytest
     # A real JWT is required (RLS rejects an invalid/unsigned one outright,

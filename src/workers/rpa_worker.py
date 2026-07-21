@@ -4,6 +4,7 @@ drives them through autenticacion -> m303_form -> justificante. T04-E1/T04-E4
 error handling per design.md SPEC-F4-04's error table.
 """
 import asyncio
+import logging
 from typing import Any
 
 from src.fiscal.alertas.programar_siguiente_trimestre import programar_alerta_siguiente_trimestre
@@ -22,6 +23,8 @@ from src.rpa.aeat.m303_form import (
 )
 from src.rpa.aeat.selectores import cargar_selectores
 from src.rpa.casilla_map import construir_mapa_casillas
+
+logger = logging.getLogger(__name__)
 
 
 def manejar_periodo_ya_presentado(client: Any, user_id: str, ejercicio: int, periodo: str) -> dict:
@@ -203,6 +206,7 @@ async def procesar_presentacion(ctx: dict, presentacion_id: str) -> dict:
         codigo_error = getattr(exc, "codigo_error", "fallo_presentacion")
         if codigo_error == "sesion_expirada":
             raise
+        logger.error("Error en presentacion %s: %s", presentacion_id, exc, exc_info=True)
         return {"estado": "error", "error_code": codigo_error}
 
     if resultado.get("estado") == "presentado" and not resultado.get("omitido"):

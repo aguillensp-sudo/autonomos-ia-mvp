@@ -16,7 +16,7 @@ from src.agent.ocr import extraer_factura_ocr
 from src.api import graph_runtime
 from src.api.arq_client import get_arq_pool
 from src.api.dependencies import AuthedRequest, get_authed_request
-from src.api.graph_runtime import PresentacionDuplicadaError
+from src.api.graph_runtime import GrafoEstadoTerminalError, PresentacionDuplicadaError
 
 router = APIRouter(prefix="/api/proceso/p04")
 
@@ -137,11 +137,17 @@ def enviar_mensaje(proceso_id: str, payload: dict, req: AuthedRequest = Depends(
 
 @router.post("/calcular")
 def calcular(payload: dict, req: AuthedRequest = Depends(get_authed_request)):
-    return graph_runtime.calcular_graph(
-        thread_id=payload["proceso_id"],
-        facturas_emitidas=payload.get("facturas_emitidas"),
-        facturas_recibidas=payload.get("facturas_recibidas"),
-    )
+    try:
+        return graph_runtime.calcular_graph(
+            thread_id=payload["proceso_id"],
+            facturas_emitidas=payload.get("facturas_emitidas"),
+            facturas_recibidas=payload.get("facturas_recibidas"),
+        )
+    except GrafoEstadoTerminalError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_error("ESTADO_TERMINAL", str(exc)),
+        ) from exc
 
 
 @router.post("/confirmar")

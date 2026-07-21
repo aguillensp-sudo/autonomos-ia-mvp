@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.dependencies import AuthedRequest, get_authed_request
-from src.api.graph_runtime import PresentacionDuplicadaError
+from src.api.graph_runtime import GrafoEstadoTerminalError, PresentacionDuplicadaError
 from src.api.main import app
 
 client = TestClient(app)
@@ -113,6 +113,17 @@ def test_post_calcular_devuelve_resultado_m303(mock_graph_runtime):
     resp = client.post("/api/proceso/p04/calcular", json={"proceso_id": "p1", "facturas_emitidas": [], "facturas_recibidas": []})
     assert resp.status_code == 200
     assert resp.json()["resultado"] == "160.00"
+
+
+@patch("src.api.routers.p04.graph_runtime")
+def test_post_calcular_estado_terminal_devuelve_409(mock_graph_runtime):
+    """HIGH-3 fix (SPEC-F5-07): calcular_graph's GrafoEstadoTerminalError
+    must map to a 409/ESTADO_TERMINAL, not an unhandled 500."""
+    mock_graph_runtime.calcular_graph.side_effect = GrafoEstadoTerminalError("u1:P04:2026:1T")
+    mock_graph_runtime.GrafoEstadoTerminalError = GrafoEstadoTerminalError
+    resp = client.post("/api/proceso/p04/calcular", json={"proceso_id": "p1", "facturas_emitidas": [], "facturas_recibidas": []})
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["error"] == "ESTADO_TERMINAL"
 
 
 @patch("src.api.routers.p04.get_arq_pool")

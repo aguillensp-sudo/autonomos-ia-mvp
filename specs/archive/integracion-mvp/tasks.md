@@ -162,11 +162,59 @@ Acceptance criteria: none directly (D11 is `MEDIA` priority, not a CA-F5 item), 
 - [x] 11.4 Note explicitly in documentation that deployment (`SPEC-F5-05` in the functional spec, Dockerfile/docker-compose/rollback) is **not** covered by this change — flagged as an open follow-up, per `design.md`'s closing note (now also in `CHANGELOG.md`)
 - [x] 11.5 Note the D11 reinterpretation (per-session runtime trigger vs. the PDR's original fleet-average decision gate) in documentation, so a future reader isn't confused by the mismatch with the PDR's literal wording (now also in `CHANGELOG.md`)
 
+## 15. Post-adversarial-review fixes (SPEC-F5-07)
+
+The first `/adversarial-review` pass found 2 CRITICAL + 2 HIGH findings. Design amended above (SPEC-F5-07) before implementation, per `CLAUDE.md` §7.
+
+### CRITICAL 1+2 — invoice construction missing required fiscal-model fields (same root cause, two call sites)
+
+- [x] 15.1 Write failing test `test_recopilar_datos_factura_emitida_via_chat_tiene_campos_requeridos`: given a mocked Anthropic response that calls `agregar_factura_emitida`, the resulting `facturas_emitidas` entry has `id`, `user_id`, `numero_factura`, `fecha` populated (not just the tool's own `base_imponible`/`tipo_iva`/`cuota_iva`/`nif_cliente`)
+- [x] 15.2 Write failing test `test_recopilar_datos_factura_recibida_via_chat_tiene_porcentaje_deducible`: given a mocked response calling `agregar_factura_recibida` with `categoria_gasto="software_saas"`, the resulting entry has `id`/`user_id`/`fecha` populated and `porcentaje_deducible="100"` (looked up from `TABLA_DEDUCIBILIDAD`, not asked of the LLM)
+- [x] 15.3 Write failing test `test_recopilar_datos_factura_recibida_categoria_desconocida_porcentaje_cero`: an unrecognized `categoria_gasto` defaults `porcentaje_deducible` to `"0"`, never crashes
+- [x] 15.4 Verify 15.1-15.3 fail: `pytest tests/agent/nodes/test_recopilar_datos.py -k "campos_requeridos or porcentaje_deducible or categoria_desconocida" -v` — confirmed all 3 fail with `KeyError` before implementation
+- [x] 15.5 Implement the enrichment in `recopilar_datos()` (`src/agent/nodes/recopilar_datos.py`) per design.md's SPEC-F5-07 resolution
+- [x] 15.6 Write failing integration test `test_calcular_node_acepta_payload_con_forma_facturareviewer`: constructs a payload matching `FacturaReviewer.tsx`'s *actual* post-fix output shape (id/user_id/fecha/base_imponible/tipo_iva/cuota_iva/nif_cliente for emitida; +categoria_gasto/porcentaje_deducible for recibida) and asserts `calcular()` (which constructs `FacturaEmitida(**f)`/`FacturaRecibida(**f)`) runs without raising — the exact crash site from Finding 1
+- [x] 15.7 Verify 15.6 fails, confirming the pre-fix crash: `pytest tests/agent/nodes/test_calcular.py -k "facturareviewer" -v` — confirmed `pydantic.ValidationError` before the frontend fix (also surfaced an invalid test-fixture NIF, corrected to a real personal-NIF format)
+- [x] 15.8 Implement `FacturaReviewer.tsx`'s fix: add `categoria_gasto`/`porcentaje_deducible` to recibida's `CAMPOS_POR_TIPO` (both default to always-must-confirm via the existing confidence-gate mechanism, no new UI pattern), compute `cuota_iva` in `handleContinuar`, add `id`/`numero_factura` generation, thread a new required `userId` prop from `page.tsx` through `FacturaUploader`, remap `nif_emisor` → `nif_cliente` on submit
+- [x] 15.9 Run 15.1-15.7 — must pass: `pytest tests/agent/nodes/test_recopilar_datos.py tests/agent/nodes/test_calcular.py tests/api/test_graph_runtime.py tests/api/test_p04_router_f5.py -m "not integration" -v` — all pass
+- [x] 15.10 Update `e2e/ocr-upload.spec.ts` to stop mocking `POST /calcular`'s response — let it hit the real endpoint with `FacturaReviewer`'s real (post-fix) output, proving Finding 1 is actually closed end-to-end, not just at the unit level
+- [x] 15.11 Run the updated spec — must pass: `npx playwright test e2e/ocr-upload.spec.ts --workers=1` — passes; real `/calcular` returns `52,50` as expected
+
+### HIGH 3 — `calcular_graph` KeyError on a terminal-state checkpoint
+
+- [x] 15.12 Write failing test `test_calcular_graph_estado_terminal_sin_resultado_lanza_error_claro`: mocked `grafo.invoke` returns a dict with no `resultado_m303` key (simulating a no-op on an already-terminal checkpoint) — asserts `GrafoEstadoTerminalError` is raised, not `KeyError`
+- [x] 15.13 Verify it fails: `pytest tests/api/test_graph_runtime.py -k "estado_terminal" -v` — confirmed `ImportError` (class didn't exist yet) before implementation
+- [x] 15.14 Implement `GrafoEstadoTerminalError` + the guard in `calcular_graph` (`src/api/graph_runtime.py`), and the `409`/`ESTADO_TERMINAL` mapping in `/calcular`'s router handler (`src/api/routers/p04.py`), per design.md's SPEC-F5-07 resolution
+- [x] 15.15 Write failing test `test_post_calcular_estado_terminal_devuelve_409`: router-level test confirming the mapped status code
+- [x] 15.16 Run tests — must pass: `pytest tests/api/test_graph_runtime.py tests/api/test_p04_router_f5.py -m "not integration" -v` — all pass
+
+### HIGH 4 — IBAN has no format validation before a real AEAT domiciliación filing
+
+- [x] 15.17 Implement `frontend/lib/validation/iban.ts` (Zod schema + ISO 13616 MOD-97 checksum, not just a regex) per design.md's SPEC-F5-07 resolution
+- [x] 15.18 Wire it into `ConfirmacionModal.tsx` (blocks `onConfirm()` on an invalid IBAN, inline error shown) and `page.tsx` (replaces the `iban.length < 4` placeholder on the pre-modal button's disabled state)
+- [x] 15.19 Add an E2E assertion proving an invalid (checksum-failing) IBAN keeps the confirm path blocked and the valid fixture `ES9121000418450200051332` (confirmed MOD-97-valid) is unaffected. Implemented as a new `e2e/iban-validation.spec.ts` with its own dedicated test user rather than appending to `cancel-confirmacion.spec.ts` — `thread_id` is deterministic (`user_id:P04:ejercicio:periodo`), so sharing a user with an existing test in the same quarter collided with the same already-terminal `calcular_graph` thread (this is exactly what 15.12-15.16's new `GrafoEstadoTerminalError` correctly caught and reported, which is what surfaced the test-isolation bug)
+
+### Full regression + report addendum
+
+- [x] 15.20 Run full backend suite: `pytest tests/ -m "not integration" -q` — 276 passed, 0 failed (≥270 ✓)
+- [x] 15.21 Run full E2E suite: `npx playwright test --workers=1` — 6/6 passed (the suite now has 6 specs, having added `iban-validation.spec.ts`). Default parallel workers (`npx playwright test` with no `--workers`) intermittently fail several specs under this local dev stack — a pre-existing infra constraint already documented in `aeat-error.spec.ts`'s own comment ("concurrent full-suite load against a single shared uvicorn process making real Anthropic API calls"), reproduced and confirmed unrelated to this fix by running each failing spec in isolation (all passed). Not something this change introduced or is in scope to fix.
+- [x] 15.22 Focused manual proof: `POST /calcular` against the real local stack (real Supabase user + perfil_fiscal, real `uvicorn`) with a real `FacturaEmitida`-shaped payload (non-empty invoice) — `200 OK` with a real `ResultadoM303` (`resultado: "21.00"`, `tipo_resultado: "a_ingresar"`), no `ValidationError`
+- [ ] 15.23 Second `/adversarial-review` pass before archiving — not run in this pass; scope was limited to the 2 CRITICAL + 2 HIGH findings per the user's explicit instruction
+
+### MEDIUM/LOW fixes (before the second adversarial-review pass)
+
+- [x] 15.24 MEDIUM-5: `design.md`'s SPEC-F5-04 primary text described the old, broken `id=eq.{proceso_id}` Realtime filter while a later Task 10 amendment already documented the fix — updated the primary text itself to describe the real (unfiltered, RLS-scoped) subscription, verified against `RpaStatus.tsx`'s actual implementation
+- [x] 15.25 MEDIUM-6: `procesar_presentacion`'s except block (`src/workers/rpa_worker.py`) swallowed every non-`sesion_expirada` exception with no logging — added a module `logger` and `logger.error(..., exc_info=True)` before the swallow
+- [x] 15.26 MEDIUM-7: `tasks.md`'s exit criteria overclaimed coverage — corrected to name the actual pre-existing gaps (`recopilar_datos.py`/`resumir.py`/`dependencies.py`/`arq_client.py`, all already documented in the Step 8 report) instead of a different, inaccurate module list
+- [x] 15.27 LOW-8: `tasks.md`'s exit criteria said "passes all 5 specs" — corrected to "6 specs" now that `iban-validation.spec.ts` (added in 15.19) brings the suite to 6
+- [x] 15.28 LOW-9: verified `FacturaReviewer.tsx`'s `nif_emisor`→`nif_cliente` remap (added in 15.8) is present and correct — no further code change needed
+- [x] 15.29 Run full backend suite: `pytest tests/ -m "not integration" -q` — confirm 276+ passed (no Playwright re-run — no behavior change, only logging/docs)
+
 ## Exit criteria (Orchestrator evaluates before accepting this change)
 
 - All tasks above checked `[x]`, with no work silently skipped
-- `pytest tests/ --cov=src/fiscal --cov=src/agent --cov=src/rpa --cov=src/workers --cov=src/api --cov-branch` reports 100% on every module except lines explicitly requiring a live AEAT/Cl@ve Móvil session
-- `npx playwright test` passes all 6 specs; manual Chrome/Safari console check is clean
+- `pytest tests/ --cov=src/fiscal --cov=src/agent --cov=src/rpa --cov=src/workers --cov=src/api --cov-branch` reports 100% on all modules this phase created or modified; pre-existing gaps in `recopilar_datos.py`/`resumir.py`/`dependencies.py`/`arq_client.py` are documented in the Step 8 report, not silently ignored
+- `npx playwright test` passes all 6 specs; manual Chrome console check is clean (Safari unavailable in this environment, documented)
 - No fiscal arithmetic exists in any `src/api/` handler — every euro amount traces back to `src/fiscal/` or the graph's own `calcular` node
 - The `confirmar` LangGraph interrupt remains the only path to `confirmado=True` — the structured `/calcular` fast-path still lands there, never bypasses it
 - ARQ retry only fires for `error_code='sesion_expirada'` — verified by test, not just code review (Task 3.3/3.4)

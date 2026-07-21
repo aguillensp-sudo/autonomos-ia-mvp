@@ -21,12 +21,15 @@ itself — every numeric field it reports came verbatim from the user's
 message; the deterministic fiscal engine (src/fiscal/) does all arithmetic
 downstream in the calcular node.
 """
+from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 from langgraph.types import interrupt
 
 from src.agent.llm_client import crear_cliente_anthropic
 from src.agent.prompts.p04_system_prompt import construir_system_prompt
+from src.fiscal.iva.tabla_deducibilidad import TABLA_DEDUCIBILIDAD
 
 _MODEL = "claude-sonnet-5"
 
@@ -132,6 +135,32 @@ def _resolver_confirmaciones(
     return baja_confianza, nuevas_emitidas, nuevas_recibidas
 
 
+def _enriquecer_factura_emitida(factura: dict, user_id: str | None) -> dict:
+    """CRITICAL fix (SPEC-F5-07): the chat tool call's agregar_factura_emitida
+    input never carries id/user_id/numero_factura/fecha — FacturaEmitida
+    requires all four. Mirrors _resolver_confirmaciones's OCR-{hex} convention."""
+    factura = dict(factura)
+    factura["id"] = str(uuid4())
+    factura["user_id"] = user_id
+    factura["numero_factura"] = f"CHAT-{uuid4().hex[:8]}"
+    factura["fecha"] = date.today().isoformat()
+    return factura
+
+
+def _enriquecer_factura_recibida(factura: dict, user_id: str | None) -> dict:
+    """CRITICAL fix (SPEC-F5-07): agregar_factura_recibida's tool schema has
+    no porcentaje_deducible field at all — looked up here from
+    TABLA_DEDUCIBILIDAD (the canonical default the agent proposes), falling
+    back to Decimal("0") for an unrecognized categoria_gasto."""
+    factura = dict(factura)
+    factura["id"] = str(uuid4())
+    factura["user_id"] = user_id
+    factura["fecha"] = date.today().isoformat()
+    regla = TABLA_DEDUCIBILIDAD.get(factura.get("categoria_gasto", ""))
+    factura["porcentaje_deducible"] = regla.porcentaje if regla else Decimal("0")
+    return factura
+
+
 def _procesar_bloques_respuesta(
     bloques,
 ) -> tuple[list[dict], list[dict], bool | None, bool | None]:
@@ -215,6 +244,8 @@ def recopilar_datos(estado: dict) -> dict:
     nuevas_emitidas, nuevas_recibidas, sin_actividad, quiere_rectificativa = _procesar_bloques_respuesta(
         respuesta.content
     )
+    nuevas_emitidas = [_enriquecer_factura_emitida(f, user_id) for f in nuevas_emitidas]
+    nuevas_recibidas = [_enriquecer_factura_recibida(f, user_id) for f in nuevas_recibidas]
 
     texto_respuesta = "".join(bloque.text for bloque in respuesta.content if bloque.type == "text")
 

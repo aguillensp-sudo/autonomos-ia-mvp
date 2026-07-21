@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 from src.api.graph_runtime import (
+    GrafoEstadoTerminalError,
     PresentacionDuplicadaError,
     calcular_graph,
     confirmar_graph,
@@ -234,6 +235,23 @@ def test_calcular_graph_estructurado_fusiona_facturas_y_agrega_mensaje_sintetico
     grafo.invoke.assert_called_once()
     invoke_args, _ = grafo.invoke.call_args
     assert invoke_args[0] is None  # graph.invoke(None, config) continues forward, no resume needed
+
+
+@patch("src.api.graph_runtime.crear_checkpointer")
+@patch("src.api.graph_runtime.construir_grafo")
+def test_calcular_graph_estado_terminal_sin_resultado_lanza_error_claro(mock_construir_grafo, mock_crear_checkpointer):
+    """HIGH-3 fix (SPEC-F5-07): a reused thread_id whose checkpoint is
+    already terminal can make grafo.invoke(None, config) no-op — resultado
+    then has no resultado_m303 key. Must raise GrafoEstadoTerminalError
+    instead of an opaque KeyError."""
+    grafo = _mock_grafo()
+    grafo.get_state.return_value = MagicMock(values={"resultado_m303": None, "mensajes": []}, tasks=[])
+    grafo.invoke.return_value = {"mensajes": []}  # no resultado_m303 key at all
+    mock_construir_grafo.return_value = grafo
+    mock_crear_checkpointer.return_value.__enter__.return_value = MagicMock()
+
+    with pytest.raises(GrafoEstadoTerminalError):
+        calcular_graph(thread_id="u1:P04:2026:1T", facturas_emitidas=[], facturas_recibidas=[])
 
 
 @patch("src.api.graph_runtime.crear_checkpointer")

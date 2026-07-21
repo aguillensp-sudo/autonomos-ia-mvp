@@ -1,6 +1,7 @@
 """Tests for recopilar_datos node. Acceptance criteria: CA-F3-04, CA-F3-08.
 Makes real calls to the Claude Sonnet 5 API (ANTHROPIC_API_KEY required).
 """
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -304,6 +305,97 @@ def test_recopilar_datos_recorta_historial_si_supera_15_turnos(mock_crear_client
 
     assert len(estado["mensajes"]) == 20
     assert len(resultado["mensajes"]) == 21
+
+
+def _mock_respuesta_tool_use(tool_name: str, tool_input: dict, texto: str = ""):
+    bloque_tool = MagicMock(type="tool_use", input=tool_input)
+    bloque_tool.name = tool_name
+    bloques = [bloque_tool]
+    if texto:
+        bloques.append(MagicMock(type="text", text=texto))
+    respuesta = MagicMock(content=bloques)
+    respuesta.usage.input_tokens = 10
+    respuesta.usage.output_tokens = 5
+    return respuesta
+
+
+@patch("src.agent.nodes.recopilar_datos.crear_cliente_anthropic")
+def test_recopilar_datos_factura_emitida_via_chat_tiene_campos_requeridos(mock_crear_cliente):
+    """CRITICAL fix (SPEC-F5-07): the chat path's agregar_factura_emitida
+    tool call only supplies base_imponible/tipo_iva/cuota_iva/nif_cliente —
+    FacturaEmitida also requires id/user_id/numero_factura/fecha, which must
+    be enriched by recopilar_datos before the invoice is stored."""
+    estado = _estado_con_n_mensajes(1)
+    estado["user_id"] = "user-123"
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_respuesta_tool_use(
+        "agregar_factura_emitida",
+        {"base_imponible": 200.0, "tipo_iva": 21, "cuota_iva": 42.0, "nif_cliente": "B12345678"},
+    )
+    mock_crear_cliente.return_value = mock_client
+
+    resultado = recopilar_datos(estado)
+
+    emitidas = resultado["facturas_emitidas"]
+    assert len(emitidas) == 1
+    factura = emitidas[0]
+    assert factura["id"]
+    assert factura["user_id"] == "user-123"
+    assert factura["numero_factura"]
+    assert factura["fecha"]
+    assert factura["base_imponible"] == 200.0
+
+
+@patch("src.agent.nodes.recopilar_datos.crear_cliente_anthropic")
+def test_recopilar_datos_factura_recibida_via_chat_tiene_porcentaje_deducible(mock_crear_cliente):
+    """CRITICAL fix (SPEC-F5-07): agregar_factura_recibida never asks the
+    LLM for porcentaje_deducible — must be looked up from
+    TABLA_DEDUCIBILIDAD by categoria_gasto, plus id/user_id/fecha filled."""
+    estado = _estado_con_n_mensajes(1)
+    estado["user_id"] = "user-123"
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_respuesta_tool_use(
+        "agregar_factura_recibida",
+        {
+            "categoria_gasto": "software_saas", "base_imponible": 20.0, "tipo_iva": 21,
+            "cuota_iva": 4.2, "requiere_confirmacion": False,
+        },
+    )
+    mock_crear_cliente.return_value = mock_client
+
+    resultado = recopilar_datos(estado)
+
+    recibidas = resultado["facturas_recibidas"]
+    assert len(recibidas) == 1
+    factura = recibidas[0]
+    assert factura["id"]
+    assert factura["user_id"] == "user-123"
+    assert factura["fecha"]
+    assert factura["porcentaje_deducible"] == Decimal("100")
+
+
+@patch("src.agent.nodes.recopilar_datos.crear_cliente_anthropic")
+def test_recopilar_datos_factura_recibida_categoria_desconocida_porcentaje_cero(mock_crear_cliente):
+    """An unrecognized categoria_gasto must not crash — defaults
+    porcentaje_deducible to 0, the same conservative fallback the table
+    itself uses for its own dudoso categories."""
+    estado = _estado_con_n_mensajes(1)
+    estado["user_id"] = "user-123"
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_respuesta_tool_use(
+        "agregar_factura_recibida",
+        {
+            "categoria_gasto": "categoria_inventada", "base_imponible": 20.0, "tipo_iva": 21,
+            "cuota_iva": 4.2, "requiere_confirmacion": False,
+        },
+    )
+    mock_crear_cliente.return_value = mock_client
+
+    resultado = recopilar_datos(estado)
+
+    recibidas = resultado["facturas_recibidas"]
+    assert len(recibidas) == 1
+    assert recibidas[0]["porcentaje_deducible"] == Decimal("0")
 
 
 @patch("src.agent.nodes.recopilar_datos.crear_cliente_anthropic")

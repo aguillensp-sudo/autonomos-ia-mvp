@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ibanSchema } from "@/lib/validation/iban";
 import type { ResultadoM303 } from "@/lib/types/p04";
 
 export interface ConfirmacionModalProps {
@@ -33,8 +35,15 @@ export function ConfirmacionModal({
   onCancel,
 }: ConfirmacionModalProps): React.JSX.Element {
   const ibanUltimos4 = iban.slice(-4);
+  const [errorIban, setErrorIban] = useState<string | null>(null);
 
   function handleConfirmar(): void {
+    const validacion = ibanSchema.safeParse(iban);
+    if (!validacion.success) {
+      setErrorIban("El IBAN introducido no es válido.");
+      return;
+    }
+    setErrorIban(null);
     console.log("confirmacion_click", { timestamp: new Date().toISOString(), user_id: userId });
     onConfirm();
   }
@@ -61,6 +70,7 @@ export function ConfirmacionModal({
           <p>
             Fecha límite: <strong>{resultado.fecha_limite}</strong>
           </p>
+          {errorIban && <p className="text-xs text-destructive">{errorIban}</p>}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onCancel}>

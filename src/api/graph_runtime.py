@@ -48,6 +48,18 @@ class PresentacionDuplicadaError(Exception):
         super().__init__("Ya existe una presentación para este período")
 
 
+class GrafoEstadoTerminalError(Exception):
+    """Raised when calcular_graph's grafo.invoke(None, config) no-ops on a
+    thread_id whose checkpoint is already at a terminal state — the
+    resulting dict has no resultado_m303 key. Mapped to a 409 at the router
+    layer; recovery is calling /iniciar again to reset the checkpoint's
+    channel values before retrying."""
+
+    def __init__(self, thread_id: str):
+        self.thread_id = thread_id
+        super().__init__(f"El proceso {thread_id} ya está en un estado terminal")
+
+
 def _config(thread_id: str) -> dict:
     return {"configurable": {"thread_id": thread_id}}
 
@@ -152,6 +164,8 @@ def calcular_graph(thread_id: str, facturas_emitidas: list[dict] | None, factura
             "mensajes": mensajes,
         })
         resultado = grafo.invoke(None, config)
+        if resultado.get("resultado_m303") is None:
+            raise GrafoEstadoTerminalError(thread_id)
         return {**resultado["resultado_m303"], "fecha_limite": resultado["fecha_limite_presentacion"]}
 
 
