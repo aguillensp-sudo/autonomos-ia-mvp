@@ -29,7 +29,7 @@ QR_BYTES = b"fake-qr-png-bytes"
 def _mock_page(nif_autenticado: str) -> MagicMock:
     page = MagicMock()
     locator = MagicMock()
-    locator.text_content.return_value = nif_autenticado
+    locator.input_value.return_value = nif_autenticado
     locator.screenshot.return_value = QR_BYTES
     page.locator.return_value = locator
     return page
@@ -57,7 +57,7 @@ def test_autenticar_clave_movil_espera_redireccion_con_timeout_120s():
     autenticar_clave_movil(nif="12345678Z", page=page, selectores=SELECTORES, notificacion_fn=MagicMock())
 
     page.wait_for_url.assert_called_once_with(
-        SELECTORES["clave_movil"]["url_autenticada_patron"], timeout=120_000
+        SELECTORES["clave_movil"]["url_autenticada_patron"], timeout=120_000, wait_until="domcontentloaded"
     )
 
 
@@ -138,10 +138,12 @@ def test_autenticar_clave_movil_sesion_real():
               "Escanéalo con la app Cl@ve Móvil ahora — tienes 120 segundos.")
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
+        browser = playwright.chromium.launch(headless=False, slow_mo=500)
         try:
             page = browser.new_page()
-            page.goto(AEAT_SEDE_URL)
+            page.set_default_timeout(60000)
+            page.goto(AEAT_SEDE_URL, wait_until="domcontentloaded", timeout=180000)
+            page.pause()
 
             sesion = autenticar_clave_movil(
                 nif=nif, page=page, selectores=selectores, notificacion_fn=_notificar_qr_a_consola,

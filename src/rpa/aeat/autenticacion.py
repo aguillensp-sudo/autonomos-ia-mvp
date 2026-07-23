@@ -34,9 +34,16 @@ class SesionAEAT:
 
 
 def capturar_qr_clave(page: Any, selectores: dict) -> bytes:
-    """Screenshots the QR element AEAT displays for Cl@ve Móvil login."""
+    """Screenshots the QR element AEAT displays for Cl@ve Móvil login.
+
+    AEAT's QR render latency after clicking boton_acceso has been observed
+    ranging from ~2s to >60s (live testing against real AEAT, see design.md
+    SPEC-F4-02 amendment), so this waits explicitly for visibility with a
+    generous margin before attempting the screenshot."""
     sel = selectores["clave_movil"]
-    return page.locator(sel["qr_elemento"]).screenshot()
+    locator = page.locator(sel["qr_elemento"])
+    locator.wait_for(state="visible", timeout=120_000)
+    return locator.screenshot()
 
 
 def autenticar_clave_movil(
@@ -57,9 +64,11 @@ def autenticar_clave_movil(
     qr_bytes = capturar_qr_clave(page, selectores)
     notificacion_fn(qr_bytes)
 
-    page.wait_for_url(sel["url_autenticada_patron"], timeout=ESPERA_REDIRECCION_MS)
+    page.wait_for_url(
+        sel["url_autenticada_patron"], timeout=ESPERA_REDIRECCION_MS, wait_until="domcontentloaded"
+    )
 
-    nif_autenticado = page.locator(sel["nif_autenticado_label"]).text_content()
+    nif_autenticado = page.locator(sel["nif_autenticado_label"]).input_value()
     if nif_autenticado != nif:
         raise AutenticacionError(
             f"NIF autenticado ({nif_autenticado!r}) no coincide con perfil.nif ({nif!r})"

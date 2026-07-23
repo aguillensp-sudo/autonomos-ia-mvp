@@ -3,10 +3,10 @@
 # When AEAT updates their UI, only this file changes — no code changes needed.
 
 clave_movil:
-  boton_acceso: "a#accesoClaveMovil"
+  boton_acceso: "button.js-deskpot-info:has-text('Cl@ve')"  # Verified against live AEAT DOM (mi-area-personal.html)
   qr_elemento: "img#imgQRAcceso"  # Verified against live AEAT DOM (Product Owner)
-  url_autenticada_patron: "*sede.agenciatributaria.gob.es*"
-  nif_autenticado_label: "span#nifAutenticado"
+  url_autenticada_patron: "https://www6.agenciatributaria.gob.es/**"
+  nif_autenticado_label: "input#nif"  # Verified against live AEAT DOM (VentanaCensalIva)
 
 navegacion:
   menu_iva: "a[href*='IVA']"
